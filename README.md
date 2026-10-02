@@ -7,7 +7,7 @@
 
 [![Solana](https://img.shields.io/badge/Solana-Mainnet--Beta-FF5600?style=flat-square&labelColor=1A1410)](https://solana.com)
 [![Protocol Fee](https://img.shields.io/badge/Fee-0.00%25-FEEFD9?style=flat-square&labelColor=1A1410)](https://quillhog.xyz/claime)
-[![Tests](https://img.shields.io/badge/Tests-58%2F58_Passed-FF5600?style=flat-square&labelColor=1A1410)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-42%2F42_Passed-FF5600?style=flat-square&labelColor=1A1410)](tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-100%25_Non--Custodial-FEEFD9?style=flat-square&labelColor=1A1410)](#-02-security--invariants)
 [![License](https://img.shields.io/badge/License-MIT-FF5600?style=flat-square&labelColor=1A1410)](LICENSE)
 
@@ -19,11 +19,11 @@ Every time a wallet interacts with a token on Solana, an **Associated Token Acco
 
 When all tokens are sold or transferred, these empty accounts remain open indefinitely, trapping SOL on-chain.
 
-**Claime** inspects the wallet, identifies eligible empty accounts, and compiles an unsigned `VersionedTransaction` (MessageV0) that executes the `CloseAccount` instruction (opcode 9), releasing 100% of the locked SOL directly back to the signing wallet[cite: 1].
+**Claime** inspects the wallet, identifies eligible empty accounts, and compiles an unsigned `VersionedTransaction` (MessageV0) that executes the `CloseAccount` instruction (opcode 9), releasing 100% of the locked SOL directly back to the signing wallet.
 
-- **0.00% Protocol Fee:** Default fee is 0%. Every recovered lamport stays with the owner[cite: 1].
+- **0.00% Protocol Fee:** The ceiling is hardcoded to 0 bps. The builder never adds a fee transfer. Every recovered lamport stays with the owner. Network signature fees still apply.
 - **WSOL Auto-Unwrap:** Automatically closes Wrapped SOL accounts, returning both the rent deposit and any trapped native SOL[cite: 1].
-- **SPL & Token-2022 Support:** Fully supports standard SPL Token and Token-2022 programs[cite: 1].
+- **SPL & Token-2022 Support:** Fully supports standard SPL Token and Token-2022 programs.
 - **Non-Custodial:** Server never sees, stores, or handles private keys. Transactions are signed entirely on the client side[cite: 1].
 
 ---
@@ -36,10 +36,10 @@ All transaction compilation is strictly verified against hardcoded invariants in
 | :--- | :--- | :--- |
 | **Non-Custodial** | `dest == owner == signer` | Core rejects any instruction where the destination address does not match the signer[cite: 1]. |
 | **MTU Packet Limit** | Max **15 accounts** / batch | Transaction payload is strictly capped under 1232 bytes to prevent IPv6/UDP network packet drop[cite: 1]. |
-| **Fee Ceiling** | Hardcoded **10.00% / 1000 bps** | Integer-only lamport arithmetic. Fee can never exceed 1000 bps regardless of parameters[cite: 1]. |
+| **Fee Ceiling** | Hardcoded **0.00% / 0 bps** | `MAX_FEE_BPS = 0`. Any positive fee is rejected. The transaction builder does not insert a fee transfer. |
 | **SEC-01 (Close Authority)** | Authority verification | Skips accounts where `closeAuthority` is delegated or does not match owner[cite: 1]. |
 | **SEC-02 (Transfer Fees)** | Token-2022 fee check | Skips Token-2022 accounts with unwithheld transfer fees to prevent on-chain transaction reverts[cite: 1]. |
-| **SEC-03 (Gas Reserve)** | Network fee check | Requires native SOL balance (>= 0.00001 SOL) to cover network signature fees before building transactions[cite: 1]. |
+| **SEC-03 (Gas Reserve)** | Network fee check | `/api/scan` reports `has_fee_reserve` when native balance is at least 0.00001 SOL. `/api/rent/build-tx` refuses to build if the reserve is missing. |
 | **SEC-04 (Frozen State)** | Account state guard | Filters out frozen token accounts[cite: 1]. |
 
 ---
@@ -49,7 +49,7 @@ All transaction compilation is strictly verified against hardcoded invariants in
 - `core_verify.py` — Pure calculator and validator with zero network I/O. Computes lamports, executes SEC-01..04 filters, and compiles `CloseAccount` instructions[cite: 1].
 - `rent_service.py` — Asynchronous FastAPI service handling account scanning, Solana Pay 2-step transactions, and rate limiting (10 req / 60 s / IP)[cite: 1].
 - `rpc_pool.py` — RPC failover client with thread-safe node rotation and exponential backoff[cite: 1].
-- `observability.py` — SQLite WAL ledger and telemetry with cookieless daily salted SHA-256 IP hashing (0 PII)[cite: 1, 5].
+- `observability.py` — SQLite WAL ledger. Settlements store the public wallet address and signature. Analytics stores a salted SHA-256 of the IP (first 16 hex chars) only when `ANALYTICS_SALT` is set, plus a truncated user-agent. No cookies. No private keys.
 
 ---
 
@@ -71,7 +71,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Run automated test suite (58/58 passed)
+# 4. Run automated test suite (42 tests)
 pytest -v
 
 # 5. Start local service
