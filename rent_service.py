@@ -1,4 +1,4 @@
-﻿"""
+"""
 Quillhog - Standalone Rent Reclaim Service (Production Engine)
 File: rent_service.py
 
@@ -94,8 +94,13 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
 # CORS setup for browser interaction and Solana Pay mobile wallets
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "https://quillhog.xyz",
+        "https://www.quillhog.xyz",
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ],
+    allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
     allow_headers=["*"],
 )
@@ -345,6 +350,32 @@ def verify_signature_onchain(signature_str: str) -> bool:
     return False
 
 
+
+MIN_FEE_RESERVE_SOL = 0.00001
+
+
+def require_fee_reserve(owner_pubkey_str: str) -> float:
+    """SEC-03: refuse to build a transaction without enough SOL for the signature fee."""
+    try:
+        balance_res = _rpc_call("getBalance", [owner_pubkey_str])
+        sol_balance = (balance_res.get("value", 0) if isinstance(balance_res, dict) else (balance_res or 0)) / 1e9
+    except Exception as e:
+        logger.error(f"Failed to fetch native SOL balance for {owner_pubkey_str}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail={"detail": f"Solana RPC getBalance failed: {e}", "error_code": "RPC_FAILURE"},
+        )
+    if sol_balance < MIN_FEE_RESERVE_SOL:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "detail": "Native SOL balance below 0.00001. Not enough for the network signature fee.",
+                "error_code": "INSUFFICIENT_FEE_RESERVE",
+            },
+        )
+    return sol_balance
+
+
 def _fetch_program_accounts(owner_pubkey_str: str, program_id: Pubkey) -> list:
     """Query RPC for token accounts owned by the wallet for a given token program."""
     raw = _rpc_call(
@@ -365,6 +396,7 @@ async def _build_claim_transaction_async(address: str) -> dict:
     user_pubkey = validate_wallet_address(address)
     verify_wallet_not_executable(str(user_pubkey))
     user_str = str(user_pubkey)
+    require_fee_reserve(user_str)
 
     try:
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -452,6 +484,7 @@ def _build_claim_transaction(address: str) -> dict:
         user_pubkey = validate_wallet_address(address)
         verify_wallet_not_executable(str(user_pubkey))
         user_str = str(user_pubkey)
+        require_fee_reserve(user_str)
         try:
             with ThreadPoolExecutor(max_workers=2) as executor:
                 f_spl = executor.submit(_fetch_program_accounts, user_str, TOKEN_PROGRAM_ID)
