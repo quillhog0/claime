@@ -4,12 +4,11 @@ File: tests/test_analytics_and_shelf.py
 """
 
 import os
-import re
 import sqlite3
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import pytest

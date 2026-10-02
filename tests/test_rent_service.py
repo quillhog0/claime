@@ -3,19 +3,19 @@ import sqlite3
 import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 
 import rent_service
+import observability
 from rent_service import (
     app,
     init_ledger_db,
-    LAMPORTS_PER_RENT,
     TOKEN_PROGRAM_ID,
     TOKEN_2022_PROGRAM_ID,
-    WSOL_MINT,
     create_close_account_instruction,
 )
+from core_verify import WSOL_MINT
 from solders.pubkey import Pubkey
 from solders.signature import Signature
 
@@ -58,7 +58,8 @@ class TestRentService(unittest.TestCase):
         self.assertIn("Invalid Solana address format", response.json()["detail"])
 
     @patch("rent_service._rpc_call")
-    def test_scan_dual_program_and_wsol(self, mock_rpc):
+    @patch("rent_service.get_sol_price_usd_async", new_callable=AsyncMock, return_value=180.0)
+    def test_scan_dual_program_and_wsol(self, mock_price, mock_rpc):
         def rpc_side_effect(method, params):
             if method == "getBalance":
                 return {"value": 10_000_000}
@@ -247,18 +248,40 @@ class TestRentService(unittest.TestCase):
         self.assertEqual(ix_t22.program_id, TOKEN_2022_PROGRAM_ID)
         self.assertEqual(ix_t22.data, bytes([9]))
 
-    @patch("rent_service.verify_signature_onchain")
-    def test_confirm_endpoint_success_and_duplicate_prevention(self, mock_verify):
-        mock_verify.return_value = True
+    @patch("rent_service.verify_signature_onchain", return_value=True)
+    @patch("rent_service._rpc_call")
+    def test_confirm_endpoint_success_and_duplicate_prevention(self, mock_rpc, mock_verify):
         dummy_sig = str(Signature.from_bytes(bytes([5] * 64)))
         wallet = "11111111111111111111111111111111"
+
+        mock_rpc.return_value = {
+            "transaction": {
+                "message": {
+                    "accountKeys": [{"pubkey": wallet}],
+                    "instructions": [
+                        {
+                            "program": "spl-token",
+                            "parsed": {
+                                "type": "closeAccount",
+                                "info": {"destination": wallet, "owner": wallet}
+                            }
+                        }
+                    ]
+                }
+            },
+            "meta": {
+                "err": None,
+                "preBalances": [1000000],
+                "postBalances": [3039280],
+            }
+        }
 
         payload = {
             "wallet": wallet,
             "signature": dummy_sig,
-            "accounts_closed": 14,
-            "sol_amount": 0.02855,
-            "estimated_usd": 4.28,
+            "accounts_closed": 1,
+            "sol_amount": 0.002039,
+            "estimated_usd": 0.36,
         }
 
         # First confirmation -> 200 OK
@@ -428,7 +451,7 @@ class TestRentService(unittest.TestCase):
     def test_db_retry_on_lock_concurrency(self):
         attempts = 0
 
-        @rent_service.retry_on_lock(max_retries=3, delay=0.01)
+        @observability.retry_on_lock(max_retries=3, delay=0.01)
         def flaky_db_write():
             nonlocal attempts
             attempts += 1
@@ -673,3 +696,124 @@ class TestRentService(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["reclaimable_usd"], 0)
         self.assertIsNone(data["sol_price_usd"])
+
+    @patch("rent_service.verify_signature_onchain", return_value=True)
+    @patch("rent_service._rpc_call")
+    def test_confirm_endpoint_foreign_transfer_rejected(self, mock_rpc, mock_verify):
+        """Confirm with non-close transaction (e.g. transfer) must return 400."""
+        wallet = "11111111111111111111111111111111"
+        dummy_sig = str(Signature.from_bytes(bytes([9] * 64)))
+        mock_rpc.return_value = {
+            "transaction": {
+                "message": {
+                    "accountKeys": [{"pubkey": wallet}],
+                    "instructions": [
+                        {
+                            "program": "spl-token",
+                            "parsed": {
+                                "type": "transfer",
+                                "info": {"source": wallet, "destination": "other", "amount": "100"}
+                            }
+                        }
+                    ]
+                }
+            },
+            "meta": {"err": None}
+        }
+        resp = client.post("/api/rent/confirm", json={
+            "wallet": wallet,
+            "signature": dummy_sig,
+            "accounts_closed": 1,
+            "sol_amount": 0.002,
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Not a CloseAccount transaction", resp.json()["detail"])
+
+    @patch("rent_service.verify_signature_onchain", return_value=True)
+    @patch("rent_service._rpc_call")
+    def test_confirm_endpoint_wallet_not_in_account_keys_rejected(self, mock_rpc, mock_verify):
+        """Confirm where wallet is missing from transaction accountKeys must return 400."""
+        wallet = "11111111111111111111111111111111"
+        dummy_sig = str(Signature.from_bytes(bytes([9] * 64)))
+        mock_rpc.return_value = {
+            "transaction": {
+                "message": {
+                    "accountKeys": [{"pubkey": "OtherWallet111111111111111111111111111111"}],
+                    "instructions": [
+                        {
+                            "program": "spl-token",
+                            "parsed": {
+                                "type": "closeAccount",
+                                "info": {"destination": wallet, "owner": wallet}
+                            }
+                        }
+                    ]
+                }
+            },
+            "meta": {"err": None}
+        }
+        resp = client.post("/api/rent/confirm", json={
+            "wallet": wallet,
+            "signature": dummy_sig,
+            "accounts_closed": 1,
+            "sol_amount": 0.002,
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not found in transaction accountKeys", resp.json()["detail"])
+
+    @patch("rent_service.verify_signature_onchain", return_value=True)
+    @patch("rent_service._rpc_call")
+    def test_confirm_endpoint_valid_close_transaction_success(self, mock_rpc, mock_verify):
+        """Confirm with valid CloseAccount transaction returns 200 and calculates accounts_closed from ix."""
+        wallet = "11111111111111111111111111111111"
+        dummy_sig = str(Signature.from_bytes(bytes([10] * 64)))
+        mock_rpc.return_value = {
+            "transaction": {
+                "message": {
+                    "accountKeys": [{"pubkey": wallet}],
+                    "instructions": [
+                        {
+                            "program": "spl-token",
+                            "parsed": {
+                                "type": "closeAccount",
+                                "info": {"destination": wallet, "owner": wallet}
+                            }
+                        },
+                        {
+                            "program": "spl-token-2022",
+                            "parsed": {
+                                "type": "closeAccount",
+                                "info": {"destination": wallet, "owner": wallet}
+                            }
+                        }
+                    ]
+                }
+            },
+            "meta": {
+                "err": None,
+                "preBalances": [1000000],
+                "postBalances": [5078560],
+            }
+        }
+        resp = client.post("/api/rent/confirm", json={
+            "wallet": wallet,
+            "signature": dummy_sig,
+            "accounts_closed": 5,
+            "sol_amount": 0.01,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["tx"], dummy_sig)
+
+    def test_rate_limit_spoofed_forwarded_for_ignored(self):
+        """Without TRUST_PROXY_HEADERS=true, spoofed X-Forwarded-For is ignored."""
+        old_val = os.environ.get("TRUST_PROXY_HEADERS")
+        try:
+            os.environ["TRUST_PROXY_HEADERS"] = "false"
+            headers_spoof = {"x-forwarded-for": "1.2.3.4"}
+            resp = client.get("/api/health", headers=headers_spoof)
+            self.assertEqual(resp.status_code, 200)
+        finally:
+            if old_val is not None:
+                os.environ["TRUST_PROXY_HEADERS"] = old_val
+            else:
+                os.environ.pop("TRUST_PROXY_HEADERS", None)

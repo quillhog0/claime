@@ -1068,7 +1068,7 @@
 
                 if (!resp.ok) {
                     const err = await resp.json();
-                    resDiv.innerHTML = `<span style="color:var(--quill);">Error: ${err.detail || 'Failed to fetch ledger data'}</span>`;
+                    resDiv.innerHTML = `<span style="color:var(--quill);">Error: ${escapeHtml(err.detail || 'Failed to fetch ledger data')}</span>`;
                     return;
                 }
 
@@ -1100,10 +1100,10 @@
                             </div>
                         </div>
                         <div class="claim-actions" id="claimActionsContainer">
-                            <button class="btn-claim" id="btn-claim-action" data-addr="${addr}" onclick="executeClaim()">
+                            <button class="btn-claim" id="btn-claim-action" data-addr="${escapeHtml(addr)}" onclick="executeClaim()">
                                 SIGN CLOSE
                             </button>
-                            <button class="btn-qr-toggle btn-qr" onclick="openSolanaPayQr('${addr}', false)">
+                            <button class="btn-qr-toggle btn-qr" onclick="openSolanaPayQr(escapeHtml('${addr}'), false)">
                                 SIGN VIA SOLANA PAY QR
                             </button>
                         </div>

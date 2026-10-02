@@ -11,13 +11,9 @@ from core_verify import (
     TOKEN_2022_PROGRAM_ID,
     WSOL_MINT,
     LAMPORTS_PER_RENT,
-    MAX_BATCH_SIZE,
-    MAX_FEE_BPS,
     validate_platform_fee_bps,
-    calculate_platform_fee_lamports,
     create_close_account_instruction,
     evaluate_account_eligibility,
-    parse_reclaimable_accounts,
 )
 
 

@@ -7,7 +7,7 @@
 
 [![Solana](https://img.shields.io/badge/Solana-Mainnet--Beta-FF5600?style=flat-square&labelColor=1A1410)](https://solana.com)
 [![Protocol Fee](https://img.shields.io/badge/Fee-0.00%25-FEEFD9?style=flat-square&labelColor=1A1410)](https://quillhog.xyz/claime)
-[![Tests](https://img.shields.io/badge/Tests-42%2F42_Passed-FF5600?style=flat-square&labelColor=1A1410)](tests/)
+[![CI](https://github.com/quillhog0/claime/actions/workflows/ci.yml/badge.svg)](https://github.com/quillhog0/claime/actions)
 [![Architecture](https://img.shields.io/badge/Architecture-100%25_Non--Custodial-FEEFD9?style=flat-square&labelColor=1A1410)](#-02-security--invariants)
 [![License](https://img.shields.io/badge/License-MIT-FF5600?style=flat-square&labelColor=1A1410)](LICENSE)
 
@@ -48,6 +48,9 @@ All transaction compilation is strictly verified against hardcoded invariants in
 
 - `core_verify.py` — Pure calculator and validator with zero network I/O. Computes lamports, executes SEC-01..04 filters, and compiles `CloseAccount` instructions.
 - `rent_service.py` — Asynchronous FastAPI service handling account scanning, Solana Pay 2-step transactions, and rate limiting (10 req / 60 s / IP).
+
+> **Note on Rate Limiting:** Rate limiting is enforced per-worker in memory. Run with a single worker (`--workers 1`), or share request state across workers via Redis if scaled horizontally.
+
 - `rpc_pool.py` — RPC failover client with thread-safe node rotation and exponential backoff.
 - `observability.py` — SQLite WAL ledger. Settlements store the public wallet address and signature. Analytics stores a salted SHA-256 of the IP (first 16 hex chars) only when `ANALYTICS_SALT` is set, plus a truncated user-agent. No cookies. No private keys.
 
@@ -61,7 +64,7 @@ All transaction compilation is strictly verified against hardcoded invariants in
 
 ```bash
 # 1. Clone repository
-git clone [https://github.com/quillhog0/claime.git](https://github.com/quillhog0/claime.git)
+git clone https://github.com/quillhog0/claime.git
 cd claime
 
 # 2. Create and activate virtual environment
@@ -79,6 +82,21 @@ uvicorn rent_service:app --reload --port 8000
 ```
 
 ---
+
+
+---
+
+## // 05 ENVIRONMENT VARIABLES
+
+| Variable | Description | Default | Required |
+| :--- | :--- | :--- | :--- |
+| `HELIUS_API_KEY` | Helius RPC API key for primary Solana mainnet connection. | *(none)* | Optional |
+| `SOLANA_RPC_URLS` | Comma-separated list of secondary Solana RPC endpoints. | `https://api.mainnet-beta.solana.com` | Optional |
+| `ANALYTICS_SALT` | Secret salt used for daily salted SHA-256 cookieless IP hashing. | Auto-generated daily | Optional |
+| `NTFY_TOPIC` | ntfy.sh topic name for operational telemetry and daily digests. | *(disabled)* | Optional |
+| `STATS_TOKEN` | Secret authorization bearer token for `/api/stats` endpoint. | *(disabled)* | Optional |
+| `RECLAIM_DB_PATH` | Path to persistent SQLite WAL ledger database. | `reclaim_vault.db` | Optional |
+| `TRUST_PROXY_HEADERS` | Whether to trust `X-Forwarded-For` / `X-Real-IP` behind reverse proxy. | `false` | Optional |
 
 ## // NOTICE
 

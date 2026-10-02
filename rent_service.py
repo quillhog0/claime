@@ -6,6 +6,7 @@ High-performance, non-custodial Solana Rent Reclaim backend.
 """
 
 from __future__ import annotations
+import hmac
 import asyncio
 import base64
 from contextlib import asynccontextmanager
@@ -18,11 +19,10 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from solders.pubkey import Pubkey
-from solders.instruction import Instruction, AccountMeta
 from solders.message import MessageV0
 from solders.transaction import VersionedTransaction
 from solders.signature import Signature
@@ -32,21 +32,14 @@ from rpc_pool import RpcFailoverPool, RpcError
 from core_verify import (
     TOKEN_PROGRAM_ID,
     TOKEN_2022_PROGRAM_ID,
-    WSOL_MINT,
-    LAMPORTS_PER_RENT,
     MAX_BATCH_SIZE as BATCH_SIZE,
-    MAX_FEE_BPS,
-    validate_platform_fee_bps,
-    calculate_platform_fee_lamports,
     create_close_account_instruction,
-    evaluate_account_eligibility,
     parse_reclaimable_accounts,
     is_valid_base58_address_fast,
     generate_solana_pay_deep_links,
 )
 from observability import (
     DB_PATH,
-    NTFY_TOPIC,
     init_ledger_db,
     record_settlement,
     log_cookieless_event,
@@ -56,7 +49,6 @@ from observability import (
     get_sol_price_usd,
     system_heartbeat_loop,
     get_analytics_digest,
-    retry_on_lock,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -111,13 +103,15 @@ RATE_LIMIT_MAX_REQUESTS = 10
 ip_request_counts = {}
 
 def get_client_ip(request: Request) -> str:
-    """Extract real client IP behind Nginx reverse proxy (X-Forwarded-For / X-Real-IP) with fallback."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
+    """Extract real client IP. Only reads proxy headers when TRUST_PROXY_HEADERS is true."""
+    trust_proxy = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in ("true", "1", "yes")
+    if trust_proxy:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = request.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -202,6 +196,11 @@ def _rpc_call(method: str, params: list):
 
 SYSTEM_PROGRAM_ID = "11111111111111111111111111111111"
 
+
+async def _rpc_call_async(method: str, params: list):
+    """Non-blocking async wrapper around _rpc_call utilizing asyncio.to_thread."""
+    return await asyncio.to_thread(_rpc_call, method, params)
+
 DISALLOWED_PROGRAM_IDS = {
     # System Program
     SYSTEM_PROGRAM_ID,
@@ -267,8 +266,29 @@ def validate_wallet_address(address: Optional[str]) -> Pubkey:
     return pubkey
 
 
-def verify_wallet_not_executable(owner_pubkey_str: str) -> None:
-    """Verify on-chain that the address is not an executable program."""
+async def verify_wallet_not_executable(owner_pubkey_str: str) -> None:
+    """Verify on-chain that the address is not an executable program (async)."""
+    try:
+        acc_info = await _rpc_call_async("getAccountInfo", [owner_pubkey_str, {"encoding": "jsonParsed"}])
+        if acc_info and isinstance(acc_info, dict):
+            val = acc_info.get("value")
+            if val and isinstance(val, dict) and val.get("executable") is True:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"detail": f"Address '{owner_pubkey_str}' is an executable program, not a user wallet.", "error_code": "EXECUTABLE_PROGRAM_NOT_WALLET"},
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"RPC query error checking account info for {owner_pubkey_str}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail={"detail": f"Solana RPC failed while checking account: {e}", "error_code": "RPC_ERROR"},
+        )
+
+
+def verify_wallet_not_executable_sync(owner_pubkey_str: str) -> None:
+    """Verify on-chain that the address is not an executable program (sync fallback)."""
     try:
         acc_info = _rpc_call("getAccountInfo", [owner_pubkey_str, {"encoding": "jsonParsed"}])
         if acc_info and isinstance(acc_info, dict):
@@ -354,8 +374,30 @@ def verify_signature_onchain(signature_str: str) -> bool:
 MIN_FEE_RESERVE_SOL = 0.00001
 
 
+async def require_fee_reserve_async(owner_pubkey_str: str) -> float:
+    """SEC-03: refuse to build a transaction without enough SOL for the signature fee (async)."""
+    try:
+        balance_res = await _rpc_call_async("getBalance", [owner_pubkey_str])
+        sol_balance = (balance_res.get("value", 0) if isinstance(balance_res, dict) else (balance_res or 0)) / 1e9
+    except Exception as e:
+        logger.error(f"Failed to fetch native SOL balance for {owner_pubkey_str}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail={"detail": f"Solana RPC getBalance failed: {e}", "error_code": "RPC_FAILURE"},
+        )
+    if sol_balance < MIN_FEE_RESERVE_SOL:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "detail": "Native SOL balance below 0.00001. Not enough for the network signature fee.",
+                "error_code": "INSUFFICIENT_FEE_RESERVE",
+            },
+        )
+    return sol_balance
+
+
 def require_fee_reserve(owner_pubkey_str: str) -> float:
-    """SEC-03: refuse to build a transaction without enough SOL for the signature fee."""
+    """SEC-03: refuse to build a transaction without enough SOL for the signature fee (sync)."""
     try:
         balance_res = _rpc_call("getBalance", [owner_pubkey_str])
         sol_balance = (balance_res.get("value", 0) if isinstance(balance_res, dict) else (balance_res or 0)) / 1e9
@@ -391,10 +433,58 @@ def _fetch_program_accounts(owner_pubkey_str: str, program_id: Pubkey) -> list:
     return raw.get("value", [])
 
 
-async def _build_claim_transaction_async(address: str) -> dict:
-    """Core transaction compiler shared by build-tx and Solana Pay QR endpoints."""
+def _compile_tx_payload(
+    user_pubkey: Pubkey,
+    all_reclaimable: list,
+    blockhash_str: str,
+    sol_price: Optional[float],
+) -> dict:
+    """Constructs versioned transaction payload for reclaimable accounts."""
+    user_str = str(user_pubkey)
+    batch = all_reclaimable[:BATCH_SIZE]
+    instructions = [
+        create_close_account_instruction(
+            account=Pubkey.from_string(item["pubkey"]),
+            dest=user_pubkey,
+            owner=user_pubkey,
+            program_id=item["program_id"],
+        )
+        for item in batch
+    ]
+
+    recent_blockhash = Hash.from_string(blockhash_str)
+    message = MessageV0.try_compile(
+        payer=user_pubkey,
+        instructions=instructions,
+        address_lookup_table_accounts=[],
+        recent_blockhash=recent_blockhash,
+    )
+    signatures = [Signature.default()] * message.header.num_required_signatures
+    unsigned_tx = VersionedTransaction.populate(message, signatures)
+    tx_bytes = bytes(unsigned_tx)
+    tx_base64 = base64.b64encode(tx_bytes).decode("utf-8")
+
+    batch_lamports = sum(item["lamports"] for item in batch)
+    batch_reclaimed_sol = round(batch_lamports / 1e9, 6)
+    reclaimable_usd = round(batch_reclaimed_sol * sol_price, 2) if (sol_price is not None and sol_price > 0) else 0.0
+
+    return {
+        "status": "ready",
+        "accounts_closed_in_batch": len(batch),
+        "total_empty_found": len(all_reclaimable),
+        "sol_reclaimed": batch_reclaimed_sol,
+        "estimated_usd": reclaimable_usd,
+        "tx_bytes_length": len(tx_bytes),
+        "mtu_safe": len(tx_bytes) <= 1232,
+        "transaction_base64": tx_base64,
+        "tx_base64_sample": tx_base64[:60] + "...",
+        "solscan_sample_url": f"https://solscan.io/account/{user_str}",
+    }
+
+
+def _compile_claim(address: str, price_getter) -> dict:
+    """Shared compiler implementation for claim transaction."""
     user_pubkey = validate_wallet_address(address)
-    verify_wallet_not_executable(str(user_pubkey))
     user_str = str(user_pubkey)
     require_fee_reserve(user_str)
 
@@ -425,54 +515,60 @@ async def _build_claim_transaction_async(address: str) -> dict:
             "transaction_base64": "",
         }
 
-    # BATCH SIZE LIMIT: 15 accounts per TX to strictly guarantee MTU safety (< 1232 B)
-    batch = all_reclaimable[:BATCH_SIZE]
-    instructions = [
-        create_close_account_instruction(
-            account=Pubkey.from_string(item["pubkey"]),
-            dest=user_pubkey,
-            owner=user_pubkey,
-            program_id=item["program_id"],
-        )
-        for item in batch
-    ]
-
     try:
         latest_blockhash_data = _rpc_call("getLatestBlockhash", [{"commitment": "confirmed"}])
         blockhash_str = latest_blockhash_data["value"]["blockhash"]
-        recent_blockhash = Hash.from_string(blockhash_str)
     except Exception as e:
         logger.error(f"Failed to fetch blockhash: {e}")
         raise HTTPException(status_code=502, detail="Failed to fetch recent blockhash from Solana RPC.")
 
-    message = MessageV0.try_compile(
-        payer=user_pubkey,
-        instructions=instructions,
-        address_lookup_table_accounts=[],
-        recent_blockhash=recent_blockhash,
-    )
-    signatures = [Signature.default()] * message.header.num_required_signatures
-    unsigned_tx = VersionedTransaction.populate(message, signatures)
-    tx_bytes = bytes(unsigned_tx)
-    tx_base64 = base64.b64encode(tx_bytes).decode("utf-8")
+    sol_price = price_getter() if callable(price_getter) else price_getter
+    return _compile_tx_payload(user_pubkey, all_reclaimable, blockhash_str, sol_price)
 
-    batch_lamports = sum(item["lamports"] for item in batch)
-    batch_reclaimed_sol = round(batch_lamports / 1e9, 6)
+
+async def _build_claim_transaction_async(address: str) -> dict:
+    """Async wrapper for build transaction."""
+    user_pubkey = validate_wallet_address(address)
+    await verify_wallet_not_executable(str(user_pubkey))
+    user_str = str(user_pubkey)
+    await require_fee_reserve_async(user_str)
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f_spl = executor.submit(_fetch_program_accounts, user_str, TOKEN_PROGRAM_ID)
+            f_2022 = executor.submit(_fetch_program_accounts, user_str, TOKEN_2022_PROGRAM_ID)
+            spl_accounts = f_spl.result()
+            token2022_accounts = f_2022.result()
+    except Exception as e:
+        logger.error(f"Solana RPC error during build-tx: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail={"detail": f"Solana RPC query failed: {e}", "error_code": "RPC_ERROR"},
+        )
+
+    spl_reclaimable, _, _, _ = parse_reclaimable_accounts(spl_accounts, TOKEN_PROGRAM_ID, user_str)
+    t22_reclaimable, _, _, _ = parse_reclaimable_accounts(token2022_accounts, TOKEN_2022_PROGRAM_ID, user_str)
+    all_reclaimable = spl_reclaimable + t22_reclaimable
+
+    if not all_reclaimable:
+        return {
+            "status": "empty",
+            "message": "No reclaimable SPL or Token-2022 accounts found.",
+            "accounts_closed_in_batch": 0,
+            "total_empty_found": 0,
+            "sol_reclaimed": 0.0,
+            "transaction_base64": "",
+        }
+
+    try:
+        latest_blockhash_data = await _rpc_call_async("getLatestBlockhash", [{"commitment": "confirmed"}])
+        blockhash_str = latest_blockhash_data["value"]["blockhash"]
+    except Exception as e:
+        logger.error(f"Failed to fetch blockhash: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch recent blockhash from Solana RPC.")
+
     sol_price = await get_sol_price_usd_async()
-    reclaimable_usd = round(batch_reclaimed_sol * sol_price, 2) if (sol_price is not None and sol_price > 0) else 0.0
-
-    return {
-        "status": "ready",
-        "accounts_closed_in_batch": len(batch),
-        "total_empty_found": len(all_reclaimable),
-        "sol_reclaimed": batch_reclaimed_sol,
-        "estimated_usd": reclaimable_usd,
-        "tx_bytes_length": len(tx_bytes),
-        "mtu_safe": len(tx_bytes) <= 1232,
-        "transaction_base64": tx_base64,
-        "tx_base64_sample": tx_base64[:60] + "...",
-        "solscan_sample_url": f"https://solscan.io/account/{user_str}",
-    }
+    return _compile_tx_payload(user_pubkey, all_reclaimable, blockhash_str, sol_price)
 
 
 def _build_claim_transaction(address: str) -> dict:
@@ -480,81 +576,12 @@ def _build_claim_transaction(address: str) -> dict:
     try:
         return asyncio.run(_build_claim_transaction_async(address))
     except RuntimeError:
-        # If already in event loop, calculate directly with cached price
         user_pubkey = validate_wallet_address(address)
-        verify_wallet_not_executable(str(user_pubkey))
+        user_pubkey = validate_wallet_address(address)
+        verify_wallet_not_executable_sync(str(user_pubkey))
         user_str = str(user_pubkey)
         require_fee_reserve(user_str)
-        try:
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                f_spl = executor.submit(_fetch_program_accounts, user_str, TOKEN_PROGRAM_ID)
-                f_2022 = executor.submit(_fetch_program_accounts, user_str, TOKEN_2022_PROGRAM_ID)
-                spl_accounts = f_spl.result()
-                token2022_accounts = f_2022.result()
-        except Exception as e:
-            logger.error(f"Solana RPC error during sync build-tx: {e}")
-            raise HTTPException(
-                status_code=502,
-                detail={"detail": f"Solana RPC query failed: {e}", "error_code": "RPC_ERROR"},
-            )
-
-        spl_reclaimable, _, _, _ = parse_reclaimable_accounts(spl_accounts, TOKEN_PROGRAM_ID, user_str)
-        t22_reclaimable, _, _, _ = parse_reclaimable_accounts(token2022_accounts, TOKEN_2022_PROGRAM_ID, user_str)
-        all_reclaimable = spl_reclaimable + t22_reclaimable
-
-        if not all_reclaimable:
-            return {
-                "status": "empty",
-                "message": "No reclaimable SPL or Token-2022 accounts found.",
-                "accounts_closed_in_batch": 0,
-                "total_empty_found": 0,
-                "sol_reclaimed": 0.0,
-                "transaction_base64": "",
-            }
-
-        batch = all_reclaimable[:BATCH_SIZE]
-        instructions = [
-            create_close_account_instruction(
-                account=Pubkey.from_string(item["pubkey"]),
-                dest=user_pubkey,
-                owner=user_pubkey,
-                program_id=item["program_id"],
-            )
-            for item in batch
-        ]
-
-        latest_blockhash_data = _rpc_call("getLatestBlockhash", [{"commitment": "confirmed"}])
-        blockhash_str = latest_blockhash_data["value"]["blockhash"]
-        recent_blockhash = Hash.from_string(blockhash_str)
-
-        message = MessageV0.try_compile(
-            payer=user_pubkey,
-            instructions=instructions,
-            address_lookup_table_accounts=[],
-            recent_blockhash=recent_blockhash,
-        )
-        signatures = [Signature.default()] * message.header.num_required_signatures
-        unsigned_tx = VersionedTransaction.populate(message, signatures)
-        tx_bytes = bytes(unsigned_tx)
-        tx_base64 = base64.b64encode(tx_bytes).decode("utf-8")
-
-        batch_lamports = sum(item["lamports"] for item in batch)
-        batch_reclaimed_sol = round(batch_lamports / 1e9, 6)
-        sol_price = get_sol_price_usd()
-        reclaimable_usd = round(batch_reclaimed_sol * sol_price, 2) if (sol_price is not None and sol_price > 0) else 0.0
-
-        return {
-            "status": "ready",
-            "accounts_closed_in_batch": len(batch),
-            "total_empty_found": len(all_reclaimable),
-            "sol_reclaimed": batch_reclaimed_sol,
-            "estimated_usd": reclaimable_usd,
-            "tx_bytes_length": len(tx_bytes),
-            "mtu_safe": len(tx_bytes) <= 1232,
-            "transaction_base64": tx_base64,
-            "tx_base64_sample": tx_base64[:60] + "...",
-            "solscan_sample_url": f"https://solscan.io/account/{user_str}",
-        }
+        return _compile_claim(address, price_getter=get_sol_price_usd)
 
 
 # ── HEALTH CHECK ROUTE ────────────────────────────────────────────────────────
@@ -607,12 +634,8 @@ async def get_network_status():
         network_status: str = "unknown"
 
         try:
-            loop = asyncio.get_running_loop()
             raw_fees = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    lambda: _rpc_call("getRecentPrioritizationFees", [])
-                ),
+                _rpc_call_async("getRecentPrioritizationFees", []),
                 timeout=2.5,
             )
             if raw_fees is not None and isinstance(raw_fees, list):
@@ -664,7 +687,7 @@ async def get_stats(request: Request):
     if not STATS_TOKEN:
         raise HTTPException(status_code=404, detail="Not Found")
     token = request.headers.get("x-stats-token")
-    if not token or token != STATS_TOKEN:
+    if not token or not hmac.compare_digest(token, STATS_TOKEN):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return get_analytics_digest(DB_PATH)
 
@@ -691,7 +714,7 @@ def serve_claime_ui(request: Request):
 async def scan_wallet(req: ScanRequest, request: Request):
     owner_pubkey = validate_wallet_address(req.wallet_address)
     owner_str = str(owner_pubkey)
-    verify_wallet_not_executable(owner_str)
+    await verify_wallet_not_executable(owner_str)
 
     if request:
         try:
@@ -733,7 +756,7 @@ async def scan_wallet(req: ScanRequest, request: Request):
 
     # SEC-03: Native SOL balance check for gas fee reserve
     try:
-        balance_res = _rpc_call("getBalance", [owner_str])
+        balance_res = await _rpc_call_async("getBalance", [owner_str])
         sol_balance = (balance_res.get("value", 0) if isinstance(balance_res, dict) else (balance_res or 0)) / 1e9
     except Exception as e:
         logger.error(f"Failed to fetch native SOL balance for {owner_str}: {e}")
@@ -863,37 +886,53 @@ def confirm_claim(req: ConfirmRequest, background_tasks: BackgroundTasks):
         if not is_confirmed:
             raise HTTPException(status_code=400, detail="Transaction signature failed or unconfirmed on-chain.")
 
-        # SEC-HARDENING: On-chain truth verification — do NOT blindly trust browser amounts.
-        # Fetch actual on-chain transaction metadata if available via RPC.
+        # SEC-HARDENING: On-chain truth verification (Nález M-5)
+        tx_data = _rpc_call(
+            "getTransaction",
+            [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0, "commitment": "confirmed"}]
+        )
+        if not tx_data or not isinstance(tx_data, dict):
+            raise HTTPException(status_code=400, detail="Transaction not found on-chain.")
+
+        meta = tx_data.get("meta") or {}
+        if meta.get("err") is not None:
+            raise HTTPException(status_code=400, detail="Transaction failed on-chain.")
+
+        tx_msg = (tx_data.get("transaction") or {}).get("message") or {}
+        acc_keys = tx_msg.get("accountKeys") or []
+
+        wallet_idx = None
+        for idx, k in enumerate(acc_keys):
+            pub = k.get("pubkey") if isinstance(k, dict) else str(k)
+            if pub == wallet:
+                wallet_idx = idx
+                break
+
+        if wallet_idx is None:
+            raise HTTPException(status_code=400, detail=f"Wallet '{wallet}' not found in transaction accountKeys.")
+
+        instructions = tx_msg.get("instructions") or []
+        close_instructions_count = 0
+        for ix in instructions:
+            if not isinstance(ix, dict):
+                continue
+            program = ix.get("program")
+            parsed = ix.get("parsed")
+            if program in ("spl-token", "spl-token-2022") and isinstance(parsed, dict) and parsed.get("type") == "closeAccount":
+                info = parsed.get("info") or {}
+                if info.get("owner") != wallet or info.get("destination") != wallet:
+                    raise HTTPException(status_code=400, detail="CloseAccount instruction owner or destination does not match wallet.")
+                close_instructions_count += 1
+
+        if close_instructions_count == 0:
+            raise HTTPException(status_code=400, detail="Not a CloseAccount transaction.")
+
+        verified_accounts = close_instructions_count
         verified_sol = sol_amount
-        verified_accounts = accounts_closed
-        try:
-            tx_data = _rpc_call(
-                "getTransaction",
-                [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0, "commitment": "confirmed"}]
-            )
-            if tx_data and isinstance(tx_data, dict):
-                meta = tx_data.get("meta") or {}
-                if meta.get("err") is not None:
-                    raise HTTPException(status_code=400, detail="Transaction failed on-chain.")
-                tx_msg = (tx_data.get("transaction") or {}).get("message") or {}
-                acc_keys = tx_msg.get("accountKeys") or []
-                wallet_idx = None
-                for idx, k in enumerate(acc_keys):
-                    pub = k.get("pubkey") if isinstance(k, dict) else str(k)
-                    if pub == wallet:
-                        wallet_idx = idx
-                        break
-                if wallet_idx is not None and "preBalances" in meta and "postBalances" in meta:
-                    pre_bal = meta["preBalances"][wallet_idx]
-                    post_bal = meta["postBalances"][wallet_idx]
-                    diff_lamports = post_bal - pre_bal
-                    if diff_lamports > 0:
-                        verified_sol = round(diff_lamports / 1e9, 6)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.debug(f"On-chain balance verification fallback for {sig}: {e}")
+        if "preBalances" in meta and "postBalances" in meta and wallet_idx is not None:
+            diff_lamports = meta["postBalances"][wallet_idx] - meta["preBalances"][wallet_idx]
+            if diff_lamports > 0:
+                verified_sol = round(diff_lamports / 1e9, 6)
 
         # 3. Append to private SQLite ledger with concurrency lock retry
         record_settlement(

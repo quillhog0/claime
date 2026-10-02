@@ -17,7 +17,7 @@ import random
 import sqlite3
 import time
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 

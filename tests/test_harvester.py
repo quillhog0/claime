@@ -1,6 +1,5 @@
 ﻿import sys
 from pathlib import Path
-import pytest
 from fastapi.testclient import TestClient
 
 # Ensure root dir is in sys.path
@@ -50,7 +49,9 @@ def test_analytics_and_stats_endpoints():
     assert "total_sol_reclaimed" in data
 
 def test_reverse_proxy_ip_rate_limiting_isolation():
+    import os
     ip_request_counts.clear()
+    os.environ["TRUST_PROXY_HEADERS"] = "true"
 
     # Client A behind Nginx proxy with X-Forwarded-For
     headers_a = {"X-Forwarded-For": "203.0.113.195, 127.0.0.1"}
