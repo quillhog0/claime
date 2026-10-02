@@ -1,1 +1,83 @@
-﻿Close empty token accounts. SOL returns to the signing wallet. 0% protocol fee.
+# QUILLHOG // CLAIME
+
+> **100% Non-Custodial Solana Rent Reclaimer.**  
+> Closes empty SPL and Token-2022 token accounts and unwraps WSOL. Recovered SOL returns directly to the signing wallet. Zero login. Zero KYC. Zero protocol fee.
+
+[![Solana](https://img.shields.io/badge/Solana-Mainnet--Beta-FF5600?style=flat-square&labelColor=1A1410)](https://solana.com)
+[![Protocol Fee](https://img.shields.io/badge/Fee-0.00%25-FEEFD9?style=flat-square&labelColor=1A1410)](https://quillhog.xyz/claime)
+[![Tests](https://img.shields.io/badge/Tests-58%2F58_Passed-FF5600?style=flat-square&labelColor=1A1410)](tests/)
+[![Architecture](https://img.shields.io/badge/Architecture-100%25_Non--Custodial-FEEFD9?style=flat-square&labelColor=1A1410)](#-02-security--invariants)
+[![License](https://img.shields.io/badge/License-MIT-FF5600?style=flat-square&labelColor=1A1410)](LICENSE)
+
+---
+
+## // 01 WHAT IS CLAIME?
+
+Every time a wallet interacts with a token on Solana, an **Associated Token Account (ATA)** is created. Each account locks approximately **0.002039 SOL** as a rent-exempt deposit.
+
+When all tokens are sold or transferred, these empty accounts remain open indefinitely, trapping SOL on-chain.
+
+**Claime** inspects the wallet, identifies eligible empty accounts, and compiles an unsigned `VersionedTransaction` (MessageV0) that executes the `CloseAccount` instruction (opcode 9), releasing 100% of the locked SOL directly back to the signing wallet.
+
+* **0.00% Protocol Fee:** Default fee is 0%. Every recovered lamport stays with the owner.
+* **WSOL Auto-Unwrap:** Automatically closes Wrapped SOL accounts, returning both the rent deposit and any trapped native SOL.
+* **SPL & Token-2022 Support:** Fully supports standard SPL Token and Token-2022 programs.
+* **Non-Custodial:** Server never sees, stores, or handles private keys. Transactions are signed entirely on the client side.
+
+---
+
+## // 02 SECURITY & INVARIANTS
+
+All transaction compilation is strictly verified against hardcoded invariants in `core_verify.py`:
+
+| Invariant | Specification | Enforcement Mechanism |
+| :--- | :--- | :--- |
+| **Non-Custodial** | `dest == owner == signer` | Core rejects any instruction where the destination address does not match the signer. |
+| **MTU Packet Limit** | Max **15 accounts** / batch | Transaction payload is strictly capped under 1232 bytes to prevent IPv6/UDP network packet drop. |
+| **Fee Ceiling** | Hardcoded **10.00% / 1000 bps** | Integer-only lamport arithmetic. Fee can never exceed 1000 bps regardless of parameters. |
+| **SEC-01 (Close Authority)** | Authority verification | Skips accounts where `closeAuthority` is delegated or does not match owner. |
+| **SEC-02 (Transfer Fees)** | Token-2022 fee check | Skips Token-2022 accounts with unwithheld transfer fees to prevent on-chain transaction reverts. |
+| **SEC-03 (Gas Reserve)** | Network fee check | Requires native SOL balance (>= 0.00001 SOL) to cover network signature fees before building transactions. |
+| **SEC-04 (Frozen State)** | Account state guard | Filters out frozen token accounts. |
+
+---
+
+## // 03 CORE COMPONENTS
+
+* `core_verify.py` — Pure calculator and validator with zero network I/O. Computes lamports, executes SEC-01..04 filters, and compiles `CloseAccount` instructions.
+* `rent_service.py` — Asynchronous FastAPI service handling account scanning, Solana Pay 2-step transactions, and rate limiting (10 req / 60 s / IP).
+* `rpc_pool.py` — RPC failover client with thread-safe node rotation and exponential backoff.
+* `observability.py` — SQLite WAL ledger and telemetry with cookieless daily salted SHA-256 IP hashing (0 PII).
+
+---
+
+## // 04 INSTALLATION & LOCAL RUN
+
+### Requirements
+* Python 3.12+
+* Solana RPC endpoint (Helius or public mainnet-beta)
+
+```bash
+# 1. Clone repository
+git clone [https://github.com/quillhog0/claime.git](https://github.com/quillhog0/claime.git)
+cd claime
+
+# 2. Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Run automated test suite (58/58 passed)
+pytest -v
+
+# 5. Start local service
+uvicorn rent_service:app --reload --port 8000
+```
+
+---
+
+## // NOTICE
+
+*Quillhog Claime provides cryptographic visualization and unsigned transaction serialization tools for public on-chain ledger records. This software does not provide tax, legal, or financial advice. Users retain 100% custody of their private keys and are solely responsible for transaction signing.*
