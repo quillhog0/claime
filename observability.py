@@ -28,7 +28,7 @@ logger = logging.getLogger("rent_service.observability")
 # Environment & Storage Defaults
 DEFAULT_DB_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("RECLAIM_DB_PATH", str(DEFAULT_DB_DIR / "reclaim_vault.db")))
-NTFY_TOPIC = os.getenv("NTFY_TOPIC", "quillhog_alerts")
+NTFY_TOPIC = os.getenv("NTFY_TOPIC", "").strip()
 ANALYTICS_SALT = os.getenv("ANALYTICS_SALT")
 
 # Price Cache & Single-Flight Async Lock (with error backoff)
