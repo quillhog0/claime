@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Spikes -->
+  <g fill="#FF5600">
+    <polygon points="70,140 130,210 180,220"/>
+    <polygon points="130,80 180,170 240,180"/>
+    <polygon points="200,40 240,140 290,150"/>
+    <polygon points="280,30 300,130 350,140"/>
+    <polygon points="360,50 360,140 410,160"/>
+    <polygon points="430,90 410,170 450,210"/>
+    <polygon points="480,160 440,230 470,280"/>
+    <polygon points="40,230 100,270 140,290"/>
+    <polygon points="30,320 90,330 130,370"/>
+    <!-- Body -->
+    <ellipse cx="270" cy="285" rx="180" ry="135"/>
+    <!-- Snout -->
+    <polygon points="340,220 490,350 480,390 360,420 300,350"/>
+    <!-- Feet -->
+    <ellipse cx="195" cy="425" rx="35" ry="25"/>
+    <ellipse cx="355" cy="425" rx="35" ry="25"/>
+  </g>
+  <!-- Belly Accent -->
+  <path d="M 230 360 Q 320 410 420 365 Q 360 300 230 360 Z" fill="#FEEFD9"/>
+  <!-- Eye -->
+  <circle cx="415" cy="310" r="16" fill="#1A1410"/>
+  <circle cx="411" cy="305" r="5" fill="#FFFFFF"/>
+  <!-- Nose -->
+  <circle cx="485" cy="352" r="12" fill="#1A1410"/>
+</svg>
