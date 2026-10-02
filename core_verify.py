@@ -30,9 +30,10 @@ LAMPORTS_PER_RENT: int = 2_039_280
 # Solana IPv6 / UDP packet MTU ceiling: 1232 bytes serialized transaction limit
 MAX_BATCH_SIZE: int = 15
 
-# Architectural Ceiling for Platform Fee: 10.00% (1000 basis points)
+# Protocol fee is hardcoded to 0% (0 basis points)
 # Rule D-03: Hardcoded upper bound. Environment variables CANNOT exceed this.
-MAX_FEE_BPS: int = 1000
+MAX_FEE_BPS = 0
+PROTOCOL_FEE_BPS = 0
 
 
 # ── PLATFORM FEE VALIDATION & INTEGER ARITHMETIC ─────────────────────────────
@@ -40,7 +41,7 @@ MAX_FEE_BPS: int = 1000
 def validate_platform_fee_bps(fee_bps: int) -> int:
     """
     Validates that the requested platform fee basis points is within safety bounds [0, MAX_FEE_BPS].
-    Raises ValueError if fee_bps is negative or exceeds the hardcoded architectural ceiling (1000 bps = 10%).
+    Raises ValueError if fee_bps is negative or exceeds the hardcoded architectural ceiling (0 bps = 0%).
     """
     if not isinstance(fee_bps, int):
         raise TypeError(f"fee_bps must be an integer, got {type(fee_bps).__name__}")
@@ -48,7 +49,7 @@ def validate_platform_fee_bps(fee_bps: int) -> int:
         raise ValueError(f"fee_bps cannot be negative (got {fee_bps})")
     if fee_bps > MAX_FEE_BPS:
         raise ValueError(
-            f"fee_bps {fee_bps} exceeds hardcoded architectural ceiling MAX_FEE_BPS ({MAX_FEE_BPS} bps = 10%)"
+            f"fee_bps {fee_bps} exceeds hardcoded architectural ceiling MAX_FEE_BPS ({MAX_FEE_BPS} bps = 0%)"
         )
     return fee_bps
 

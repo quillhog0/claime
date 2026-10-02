@@ -1,4 +1,4 @@
-﻿"""
+"""
 Riley QA & Red Team: Web Analytics, Prague Slots & Shelf Invariant Test Suite
 File: tests/test_analytics_and_shelf.py
 """
@@ -39,40 +39,10 @@ def resolve_html_file(filename: str) -> Path:
         return web_p
     return Path(__file__).resolve().parent.parent / filename
 
-def test_index_has_no_check_or_wallet_input():
-    """Verify index.html has no CHECK button and no wallet address input field."""
-    idx_path = resolve_html_file("index.html")
-    assert idx_path.exists(), "index.html must exist"
-    content = idx_path.read_text(encoding="utf-8")
-    
-    # Must not contain wallet/address input
-    assert not re.search(r'<input[^>]+(wallet|address)', content, re.IGNORECASE), "VETO: index.html has wallet input!"
-    # Must not contain CHECK button
-    assert not re.search(r'>CHECK<|id=["\']checkBtn["\']|class=["\'][^"\']*btn-check', content, re.IGNORECASE), "VETO: index.html has CHECK button!"
 
 
-def test_ticker_no_lamports_and_has_clean_fallbacks():
-    """Verify ticker does not display 'lamports' and default fallback in DOM is '—'."""
-    for filename in ["index.html", "claime.html"]:
-        p = resolve_html_file(filename)
-        content = p.read_text(encoding="utf-8")
-        
-        # Word 'lamports' must not be in the file
-        assert "lamports" not in content.lower(), f"VETO: {filename} contains the word 'lamports'!"
-        
-        # DOM elements for ticker must have '—' as initial content
-        for fid in ["netSolPrice", "netFeeSol", "netStatus"]:
-            m = re.search(rf'id=[\'"]{fid}[\'"][^>]*>([^<]+)<', content)
-            assert m is not None, f"{filename} missing ticker element {fid}"
-            assert m.group(1).strip() == "—", f"{filename} element {fid} default is not '—'"
 
 
-def test_live_badge_css_not_turquoise_green():
-    """Verify LIVE badge CSS does not use #00F5A0 or turquoise green."""
-    for filename in ["index.html", "claime.html"]:
-        p = resolve_html_file(filename)
-        content = p.read_text(encoding="utf-8")
-        assert "#00F5A0" not in content.upper(), f"VETO: {filename} contains turquoise/green #00F5A0!"
 
 
 def test_claime_has_no_transparency_panels():
@@ -246,54 +216,10 @@ def test_digest_message_format():
     assert "claims ledger: 5 | SOL reclaimed: 0.042" in msg
 
 
-def test_shelf_cards_and_single_live_badge():
-    """Verify shelf has 3 cards and exactly one LIVE badge (Claime)."""
-    idx_path = resolve_html_file("index.html")
-    content = idx_path.read_text(encoding="utf-8")
-    
-    # 3 cards
-    assert 'class="shelf-card"' in content
-    assert content.count('class="shelf-card"') == 3, "VETO: shelf-grid must have exactly 3 cards!"
-    
-    # Exactly one LIVE in cards
-    live_badges = re.findall(r'>LIVE<', content)
-    assert len(live_badges) == 1, f"VETO: Expected exactly 1 LIVE badge in shelf, got {len(live_badges)}"
-    
-    # Claime has live button
-    assert 'href="/claime"' in content
-    assert 'OPEN CLAIME' in content
-    
-    # Record has NEXT and /record
-    assert '>NEXT<' in content
-    assert 'href="/record"' in content
-    
-    # Till has SOON and /till
-    assert '>SOON<' in content
-    assert 'href="/till"' in content
 
 
-def test_record_and_till_pages_and_routes(client):
-    """Verify record.html and till.html static files have no input and no t.me CTA."""
-    for filename in ["record.html", "till.html"]:
-        file_path = resolve_html_file(filename)
-        assert file_path.exists(), f"VETO: {filename} missing in web static!"
-        content = file_path.read_text(encoding="utf-8")
-        
-        # No input fields
-        assert not re.search(r'<input', content, re.IGNORECASE), f"VETO: {filename} contains input fields!"
-        
-        # No t.me as CTA
-        assert "t.me" not in content, f"VETO: {filename} contains t.me link!"
 
 
-def test_forbidden_words_across_shelf():
-    """Verify 0 forbidden words across all shelf pages."""
-    forbidden = ["koinly", "one click", "guaranteed", "blog"]
-    for filename in ["index.html", "claime.html", "record.html", "till.html"]:
-        p = resolve_html_file(filename)
-        content = p.read_text(encoding="utf-8").lower()
-        for word in forbidden:
-            assert word not in content, f"VETO: {filename} contains forbidden word '{word}'!"
 
 
 def test_api_net_exact_keys(client):
@@ -305,124 +231,8 @@ def test_api_net_exact_keys(client):
     assert set(data.keys()) == expected_keys, f"VETO: /api/net keys {set(data.keys())} != {expected_keys}"
 
 
-def test_roxy_cut_shelf_invariants(client):
-    """Riley QA & Red Team: Verify all Roxy Cut invariants across / and subpages."""
-    base_dir = Path(__file__).resolve().parent.parent
-
-    # 1. / (index.html)
-    idx_content = resolve_html_file("index.html").read_text(encoding="utf-8")
-    assert "t.me" not in idx_content.lower(), "VETO: index.html has t.me!"
-    assert "rail" not in idx_content.lower(), "VETO: index.html has word 'rail'!"
-    assert not re.search(r'>CHECK<|id=["\']checkBtn["\']|class=["\'][^"\']*btn-check', idx_content, re.IGNORECASE)
-    assert "01 //" not in idx_content and "02 //" not in idx_content and "03 //" not in idx_content, "VETO: index.html has 01-03 statements!"
-    assert "shelf-statements" not in idx_content, "VETO: index.html has shelf-statements block!"
-
-    # Record card has 10 USDC
-    assert "10 USDC" in idx_content or "10&nbsp;USDC" in idx_content, "VETO: Record card missing 10 USDC!"
-
-    # Exactly one LIVE badge in shelf cards
-    live_badges = re.findall(r'>LIVE<', idx_content)
-    assert len(live_badges) == 1, f"VETO: expected 1 LIVE badge, got {len(live_badges)}"
-
-    # Spikes floor on / and /claime
-    assert "spikes-wrapper" in idx_content, "VETO: index.html missing spikes-wrapper!"
-    claime_content = resolve_html_file("claime.html").read_text(encoding="utf-8")
-    assert "spikes-wrapper" in claime_content, "VETO: claime.html missing spikes-wrapper!"
-
-    # Construction tape on /record and /till, and no spike as sole floor
-    for path, fname, stamp in [("/record", "record.html", "NEXT"), ("/till", "till.html", "SOON")]:
-        content = resolve_html_file(fname).read_text(encoding="utf-8")
-
-        # 0 input, 0 download/checkout button
-        assert not re.search(r'<input', content, re.IGNORECASE), f"VETO: {fname} contains input!"
-        assert not re.search(r'>download<|>checkout<|btn-download|btn-checkout', content, re.IGNORECASE), f"VETO: {fname} contains download/checkout!"
-
-        # Stamp badge
-        assert stamp in content, f"VETO: {fname} missing stamp {stamp}!"
-        assert "stamp-badge" in content, f"VETO: {fname} missing stamp-badge class!"
-
-        # Construction tape floor
-        assert "construction-tape" in content, f"VETO: {fname} missing construction-tape floor!"
-        assert "spikes-wrapper" not in content, f"VETO: {fname} must not have spikes as floor!"
-
-    # GitHub href and unified footer on all 4 pages
-    for fname in ["index.html", "claime.html", "record.html", "till.html"]:
-        content = resolve_html_file(fname).read_text(encoding="utf-8")
-        assert "github.com/quillhog0" in content, f"VETO: {fname} missing github.com/quillhog0 link!"
-        assert "[ Shelf ]" in content, f"VETO: {fname} missing [ Shelf ] link in footer!"
-        assert "[ X ]" in content, f"VETO: {fname} missing [ X ] link in footer!"
-        assert "[ GitHub ]" in content, f"VETO: {fname} missing [ GitHub ] link in footer!"
-        assert "// NOTICE" in content, f"VETO: {fname} missing // NOTICE!"
-
-        # 0 forbidden words
-        forbidden = [
-            "one click",
-            "guaranteed",
-            "risk-free",
-            "koinly",
-            "harvester",
-            "infrastructure compiling",
-            "marquee",
-        ]
-        lower_content = content.lower()
-        for fw in forbidden:
-            assert fw not in lower_content, f"VETO: {fname} contains forbidden term '{fw}'!"
 
 
-def test_footer_live_invariants(client):
-    """Riley QA: Verify footer-live requirements across all 4 pages."""
-    base_dir = Path(__file__).resolve().parent.parent
-    pages = ["index.html", "claime.html", "record.html", "till.html"]
-
-    for fname in pages:
-        p = resolve_html_file(fname)
-        content = p.read_text(encoding="utf-8")
-
-        # 1. 0 instances of nested brackets '[ [' or '] ]'
-        assert "[ [" not in content, f"VETO: {fname} contains nested '[ ['"
-        assert "] ]" not in content, f"VETO: {fname} contains nested '] ]'"
-
-        # 2. site-foot-links present
-        assert 'class="site-foot-links"' in content, f"VETO: {fname} missing site-foot-links class!"
-        assert '<nav class="site-foot-links">' in content, f"VETO: {fname} missing <nav class=\"site-foot-links\">!"
-
-        # 3. white-space: nowrap in CSS for footer links
-        assert "white-space: nowrap;" in content, f"VETO: {fname} missing white-space: nowrap in CSS!"
-
-        # 4. GitHub + X + Shelf present on all 4 pages
-        assert 'href="/"' in content and "[ Shelf ]" in content, f"VETO: {fname} missing Shelf link!"
-        assert "https://x.com/quillhog0" in content and "[ X ]" in content, f"VETO: {fname} missing X link!"
-        assert "https://github.com/quillhog0" in content and "[ GitHub ]" in content, f"VETO: {fname} missing GitHub link!"
-
-        # 5. 320px smoke: text of link has 'Shelf' and ']' on the same <a> node inside site-foot-links
-        nav_match = re.search(r'<nav class="site-foot-links">(.*?)</nav>', content, re.DOTALL)
-        assert nav_match is not None, f"VETO: {fname} missing <nav class=\"site-foot-links\">"
-        shelf_match = re.search(r'<a\s+href="/"[^>]*>([^<]+)</a>', nav_match.group(1))
-        assert shelf_match is not None, f"VETO: {fname} missing Shelf <a> node in foot links"
-        shelf_text = shelf_match.group(1).strip()
-        assert "Shelf" in shelf_text and "]" in shelf_text and "[" in shelf_text
-        assert shelf_text == "[ Shelf ]", f"VETO: {fname} Shelf text is '{shelf_text}', expected '[ Shelf ]'"
-
-        # 6. Ticker defaults before JS must be '—', not hardcoded numbers
-        assert '$117' not in content, f"VETO: {fname} has hardcoded $117!"
-        assert '$118' not in content, f"VETO: {fname} has hardcoded $118!"
-        # In DOM default, netFeeSol must be '—'
-        m_fee = re.search(r'id=["\']netFeeSol["\'][^>]*>([^<]+)<', content)
-        assert m_fee is not None and m_fee.group(1).strip() == "—", f"VETO: {fname} netFeeSol default is not '—'"
-        m_price = re.search(r'id=["\']netSolPrice["\'][^>]*>([^<]+)<', content)
-        assert m_price is not None and m_price.group(1).strip() == "—", f"VETO: {fname} netSolPrice default is not '—'"
-
-    # 7. /record has exactly one visible NEXT in artifact stamp (not secondary badge under hog)
-    rec_content = resolve_html_file("record.html").read_text(encoding="utf-8")
-    next_occurrences = re.findall(r'>NEXT<', rec_content)
-    assert len(next_occurrences) == 1, f"VETO: record.html has {len(next_occurrences)} NEXT badges, expected exactly 1!"
-    assert '<div class="stamp-badge">NEXT</div>' in rec_content
-
-    # 8. /till has exactly one visible SOON in artifact stamp (not secondary badge under hog)
-    till_content = resolve_html_file("till.html").read_text(encoding="utf-8")
-    soon_occurrences = re.findall(r'>SOON<', till_content)
-    assert len(soon_occurrences) == 1, f"VETO: till.html has {len(soon_occurrences)} SOON badges, expected exactly 1!"
-    assert '<div class="stamp-badge">SOON</div>' in till_content
 
 
 

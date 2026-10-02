@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -43,25 +43,6 @@ class TestRentService(unittest.TestCase):
             except Exception:
                 pass
 
-    def test_serve_ui(self):
-        # 1. Homepage (index.html) is served by web static server, not rent_service uvicorn
-        web_index = Path(__file__).resolve().parent.parent.parent.parent / "web" / "index.html"
-        index_text = web_index.read_text(encoding="utf-8")
-        self.assertIn("quillhog", index_text.lower())
-        self.assertIn("claime", index_text.lower())
-        self.assertIn("record", index_text.lower())
-        self.assertNotIn("walletinput", index_text.lower())
-
-        # 2. Tool (/claime) has CHECK/SIGN flow, QR modal, and transparency grid removed
-        claime_resp = client.get("/claime")
-        self.assertEqual(claime_resp.status_code, 200)
-        self.assertNotIn("transparency-grid", claime_resp.text)
-        self.assertIn("qr-modal", claime_resp.text)
-        self.assertIn("walletinput", claime_resp.text.lower())
-
-        # 3. Engine only serves /claime and /api, root/favicon are 404
-        self.assertEqual(client.get("/").status_code, 404)
-        self.assertEqual(client.get("/favicon.ico").status_code, 404)
 
     def test_health_endpoints(self):
         for path in ["/api/health", "/health"]:

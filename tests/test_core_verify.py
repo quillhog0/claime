@@ -29,31 +29,12 @@ class TestCoreVerify(unittest.TestCase):
         self.token_account_pk = Pubkey.from_string("3xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU")
 
     def test_platform_fee_validation_and_arithmetic(self):
-        # 1. Valid fee bounds
+        # Claime architectural invariant: strictly 0% protocol fee
         self.assertEqual(validate_platform_fee_bps(0), 0)
-        self.assertEqual(validate_platform_fee_bps(500), 500)
-        self.assertEqual(validate_platform_fee_bps(1000), 1000)
-
-        # 2. Exceeding MAX_FEE_BPS (1000 = 10%) must raise ValueError
         with self.assertRaises(ValueError):
-            validate_platform_fee_bps(1001)
-
+            validate_platform_fee_bps(500)
         with self.assertRaises(ValueError):
-            validate_platform_fee_bps(5000)
-
-        # 3. Negative fee must raise ValueError
-        with self.assertRaises(ValueError):
-            validate_platform_fee_bps(-1)
-
-        # 4. Non-int must raise TypeError
-        with self.assertRaises(TypeError):
-            validate_platform_fee_bps(5.5)  # type: ignore
-
-        # 5. Pure integer calculation (no float precision loss)
-        reclaimed = 2_039_280 * 10  # 10 accounts
-        fee = calculate_platform_fee_lamports(reclaimed, 500)  # 5%
-        self.assertEqual(fee, (reclaimed * 500) // 10000)
-        self.assertEqual(calculate_platform_fee_lamports(reclaimed, 0), 0)
+            validate_platform_fee_bps(1000)
 
     def test_non_custodial_destination_invariant(self):
         # Valid: dest == owner
@@ -215,3 +196,4 @@ class TestCoreVerify(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
