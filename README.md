@@ -74,7 +74,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Run automated test suite (42 tests)
+# 4. Run automated test suite (46 tests)
 pytest -v
 
 # 5. Start local service
@@ -83,8 +83,6 @@ uvicorn rent_service:app --reload --port 8000
 
 ---
 
-
----
 
 ## // 05 ENVIRONMENT VARIABLES
 
