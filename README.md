@@ -38,7 +38,7 @@ All transaction compilation is strictly verified against hardcoded invariants in
 | **MTU Packet Limit** | Max **15 accounts** / batch | Transaction payload is strictly capped under 1232 bytes to prevent IPv6/UDP network packet drop. |
 | **Fee Ceiling** | Hardcoded **0.00% / 0 bps** | `MAX_FEE_BPS = 0`. Any positive fee is rejected. The transaction builder does not insert a fee transfer. |
 | **SEC-01 (Close Authority)** | Authority verification | Skips accounts where `closeAuthority` is delegated or does not match owner. |
-| **SEC-02 (Transfer Fees)** | Token-2022 fee check | Skips Token-2022 accounts with unwithheld transfer fees to prevent on-chain transaction reverts. |
+| **SEC-02 (Transfer Fees)** | Token-2022 fee check | Skips Token-2022 accounts with withheld transfer fees to prevent on-chain transaction reverts. |
 | **SEC-03 (Gas Reserve)** | Network fee check | `/api/scan` reports `has_fee_reserve` when native balance is at least 0.00001 SOL. `/api/rent/build-tx` refuses to build if the reserve is missing. |
 | **SEC-04 (Frozen State)** | Account state guard | Filters out frozen token accounts. |
 
