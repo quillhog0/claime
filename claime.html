@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claime — Pick up SOL from empty token accounts</title>
+    <meta name="description" content="Claime: Pick up SOL from empty token accounts. 0% protocol fee.">
+    <meta name="theme-color" content="#1A1410">
+    
+    <!-- Open Graph & Twitter Cards -->
+    <meta property="og:title" content="Claime — Pick up SOL from empty token accounts">
+    <meta property="og:description" content="Claime: Pick up SOL from empty token accounts. 0% protocol fee.">
+    <meta property="og:image" content="https://quillhog.xyz/og-banner.png">
+    <meta name="twitter:card" content="summary_large_image">
+    
+    <!-- Web Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Favicon Assets (Quillhog Identity - ink background, not transparent) -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    
+    <!--
+       /\_/\
+      ( o.o )  Quillhog. Spiky alias.
+       > ^ <   @quillhog0
+    -->
+
+    <!-- Solana Web3 & QR Libraries with Subresource Integrity (SRI) -->
+    <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js" integrity="sha384-xo1g+ODR6i1cxIVZeALc/apXFHeaJHO1j1whMO3dhtdBChWeaihnDs7UnXs9ch78" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
+    <script>console.log("Quillhog. @quillhog0");</script>
+
+    <style>
+        /* Raw System Variables (Zero Dependency) */
+        :root {
+            --ink: #1A1410;
+            --quill: #FF5600;
+            --cream: #FEEFD9;
+            --card: #251D17;
+            --muted-gray: #9e8e82;
+            --border-subtle: rgba(254, 239, 217, 0.12);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1A1410;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #251D17;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #FF5600;
+        }
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #251D17 #1A1410;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: var(--ink);
+            color: var(--cream);
+            font-family: 'Courier New', Courier, monospace;
+            font-variant-numeric: tabular-nums;
+            min-height: 100svh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+            padding-bottom: 40px;
+            box-sizing: border-box;
+        }
+
+        ::selection { background: var(--quill); color: var(--ink); }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 1.5rem 2rem;
+            text-align: center;
+            z-index: 10;
+            width: 100%;
+            max-width: 75rem; /* Large fluid desktop layout */
+            margin: 0 auto;
+            box-sizing: border-box;
+        }
+
+        /* Breadcrumb navigation */
+        .breadcrumb {
+            font-size: 0.85rem;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--quill);
+            margin-bottom: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .breadcrumb a {
+            color: var(--cream);
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+
+        .breadcrumb a:hover {
+            color: var(--quill);
+        }
+
+        .breadcrumb span {
+            color: var(--quill);
+        }
+
+        /* Floating Logo (Smaller compact presence on tool page) */
+        .logo-wrap {
+            width: 3.5rem;
+            margin-bottom: 0.6rem;
+            filter: drop-shadow(0 10px 16px rgba(0,0,0,0.6));
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        h1 {
+            font-size: clamp(1.6rem, 3.8vw, 2.5rem);
+            font-weight: 900;
+            letter-spacing: 0.05em;
+            margin: 0 0 0.4rem 0;
+            line-height: 1.1;
+        }
+
+        h1 span {
+            color: var(--quill);
+        }
+
+        p.subtitle {
+            font-size: 0.95rem;
+            color: var(--cream);
+            max-width: 38rem;
+            line-height: 1.45;
+            margin: 0 auto 1.3rem auto;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* Reclaim Scanner Card */
+        .reclaim-card {
+            background: var(--card);
+            border: 1px solid rgba(255, 86, 0, 0.25);
+            border-radius: 6px;
+            padding: 18px 24px;
+            width: 100%;
+            max-width: 42rem; /* Expanded bold desktop presence */
+            margin: 0 auto 1.5rem auto;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+            text-align: left;
+            box-sizing: border-box;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .reclaim-card:hover {
+            border-color: rgba(255, 86, 0, 0.45);
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.65), 0 0 15px rgba(255, 86, 0, 0.08);
+        }
+
+        .reclaim-header {
+            font-size: 0.75rem;
+            color: var(--quill);
+            letter-spacing: 0.15em;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+
+        .reclaim-desc {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11.5px;
+            line-height: 1.55;
+            color: var(--muted-gray);
+            text-align: left;
+            margin: 0 0 16px 0;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background: var(--ink);
+            border: 1px solid rgba(254, 239, 217, 0.2);
+            color: var(--cream);
+            padding: 10px 14px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11.5px;
+            border-radius: 4px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]::placeholder {
+            color: rgba(254, 239, 217, 0.35);
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--quill);
+            box-shadow: 0 0 8px rgba(255, 86, 0, 0.25);
+        }
+
+        button.btn-primary {
+            background: var(--quill);
+            color: var(--ink);
+            font-weight: 900;
+            border: none;
+            padding: 10px 16px;
+            font-size: 11.5px;
+            font-family: 'Courier New', Courier, monospace;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: transform 0.15s ease, filter 0.15s ease;
+            white-space: nowrap;
+        }
+
+        button.btn-primary:hover {
+            filter: brightness(1.15);
+            transform: translateY(-1px);
+        }
+
+        button.btn-primary:active {
+            transform: scale(0.96);
+        }
+
+        .scan-res {
+            margin-top: 12px;
+            font-size: 11.5px;
+            line-height: 1.55;
+            display: none;
+            background: var(--ink);
+            padding: 14px 16px;
+            border-radius: 4px;
+            border: 1px solid var(--border-subtle);
+            animation: fadeIn 0.25s ease-out;
+            color: #d0d0d0;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .scanning-pulse {
+            display: inline-block;
+            color: var(--quill);
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Breakdown Telemetry */
+        .scan-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-bottom: 14px;
+        }
+
+        .breakdown-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #8b949e;
+            font-size: 11.5px;
+        }
+
+        .breakdown-row .row-val {
+            color: #d0d0d0;
+            font-weight: 700;
+        }
+
+        .breakdown-divider {
+            height: 1px;
+            background: rgba(254, 239, 217, 0.1);
+            margin: 6px 0;
+        }
+
+        .breakdown-total {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            padding-top: 4px;
+        }
+
+        .total-label {
+            color: #d0d0d0;
+            font-weight: 700;
+        }
+
+        .sol-amount {
+            color: var(--cream);
+            font-weight: 800;
+        }
+
+        .usd-amount {
+            color: var(--muted-gray);
+            font-size: 10.5px;
+            margin-left: 4px;
+            font-weight: normal;
+        }
+
+        /* Action Buttons */
+        .claim-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        button.btn-claim {
+            background: var(--quill, #FF5600);
+            color: #000000;
+            font-weight: 900;
+            border: none;
+            padding: 12px;
+            font-size: 11.5px;
+            font-family: 'Courier New', Courier, monospace;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            border-radius: 4px;
+            width: 100%;
+            transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+        }
+
+        button.btn-claim:hover {
+            background: #e04b00;
+            transform: translateY(-1px);
+            box-shadow: 0 0 16px rgba(255, 86, 0, 0.35);
+        }
+
+        button.btn-claim:active {
+            transform: scale(0.98);
+        }
+
+        button.btn-qr-toggle, button.btn-qr {
+            background: rgba(255, 86, 0, 0.1);
+            color: var(--cream, #FEEFD9);
+            border: 1px solid rgba(255, 86, 0, 0.45);
+            padding: 12px;
+            font-size: 11.5px;
+            font-weight: 800;
+            font-family: 'Courier New', Courier, monospace;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            border-radius: 4px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        button.btn-qr-toggle:hover, button.btn-qr:hover {
+            background: rgba(255, 86, 0, 0.25);
+            border-color: var(--quill, #FF5600);
+            color: #ffffff;
+            box-shadow: 0 0 16px rgba(255, 86, 0, 0.25);
+            transform: translateY(-1px);
+        }
+
+        button.btn-qr-toggle:active, button.btn-qr:active {
+            transform: scale(0.98);
+        }
+
+        /* Pre-Sign Transparency Box */
+        .pre-sign-box {
+            margin-top: 12px;
+            background: #1a1512;
+            border: 1px solid rgba(255, 86, 0, 0.35);
+            border-radius: 4px;
+            padding: 12px 14px;
+            text-align: left;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .pre-sign-title {
+            color: #f0ece6;
+            font-size: 11.5px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            line-height: 1.45;
+        }
+
+        .pre-sign-note {
+            color: #b0aca6;
+            font-size: 11px;
+            line-height: 1.5;
+            border-top: 1px dashed rgba(254, 239, 217, 0.15);
+            padding-top: 8px;
+            margin-top: 6px;
+        }
+
+        /* Post-transaction status block */
+        .tx-result {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px dashed rgba(254, 239, 217, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        .tx-status {
+            color: #d0d0d0;
+            font-size: 11.5px;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+
+        .tx-meta {
+            color: #8b949e;
+            font-size: 10.5px;
+        }
+
+        .tx-meta .val {
+            color: #d0d0d0;
+            font-weight: 700;
+        }
+
+        .tx-meta .val-green {
+            color: var(--cream);
+            font-weight: 800;
+        }
+
+        .tx-actions {
+            margin-top: 2px;
+        }
+
+        .btn-solscan {
+            color: var(--quill, #FF5600);
+            text-decoration: none;
+            font-size: 11.5px;
+            font-weight: 800;
+            display: inline-block;
+            transition: color 0.15s ease, transform 0.15s ease;
+        }
+
+        .btn-solscan:hover {
+            color: var(--cream);
+            transform: translateX(2px);
+        }
+
+        .post-claim-deal {
+            margin-top: 16px;
+            padding: 16px;
+            background: rgba(255, 86, 0, 0.08);
+            border: 1px solid #FF5600;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .post-claim-deal .deal-text {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: #f0f0f0;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+
+        .btn-follow-x {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #FF5600;
+            color: #120d0a;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            font-size: 13px;
+            text-decoration: none;
+            border-radius: 2px;
+            letter-spacing: 1px;
+            transition: background 0.2s ease, transform 0.15s ease;
+            box-sizing: border-box;
+        }
+
+        .btn-follow-x:hover {
+            background: #e04b00;
+            transform: translateY(-1px);
+        }
+
+        .tx-error-msg {
+            color: #8b949e;
+            font-size: 11.5px;
+            margin-top: 8px;
+            display: block;
+        }
+
+        /* High-Contrast Secure QR Code Modal & Transparency Manifest */
+        .qr-security-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(10, 8, 6, 0.92);
+            backdrop-filter: blur(6px);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .qr-modal-content {
+            background: var(--card);
+            border: 1px solid var(--quill);
+            border-radius: 6px;
+            padding: 22px;
+            max-width: 25rem;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.85), 0 0 24px rgba(255,86,0,0.2);
+            box-sizing: border-box;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .qr-header {
+            font-size: 10.5px;
+            color: var(--quill);
+            letter-spacing: 1.5px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .qr-notice-alert {
+            background: rgba(255, 86, 0, 0.12);
+            border: 1px dashed var(--quill);
+            color: var(--cream);
+            font-size: 10.5px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            text-align: left;
+            line-height: 1.4;
+        }
+
+        .qr-security-banner {
+            background: #1a1512;
+            border: 1px solid #FF5600;
+            border-radius: 4px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+            text-align: left;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .banner-title {
+            color: #f0ece6;
+            font-size: 11.5px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .banner-desc {
+            color: #b0aca6;
+            font-size: 11.5px;
+            line-height: 1.55;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .banner-desc b {
+            color: #f0ece6;
+            font-weight: 700;
+        }
+
+        .qr-code-outer {
+            position: relative;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .qr-code-wrapper {
+            background: #ffffff;
+            padding: 14px;
+            border-radius: 6px;
+            display: inline-block;
+            border: 2px solid var(--quill);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .qr-code-wrapper img, .qr-code-wrapper canvas {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .qr-center-badge {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 46px;
+            height: 46px;
+            background: #1A1410;
+            border: 2px solid #FF5600;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+            pointer-events: none;
+            z-index: 10;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+
+        .qr-center-badge img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 0 4px rgba(255, 86, 0, 0.5));
+        }
+
+        .btn-wallet-direct {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: rgba(255, 86, 0, 0.12);
+            border: 1px solid var(--quill);
+            color: var(--cream);
+            font-size: 11px;
+            padding: 8px 14px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-wallet-direct:hover {
+            background: var(--quill);
+            color: #1A1410;
+            transform: translateY(-1px);
+        }
+
+        .qr-actions {
+            display: flex;
+            width: 100%;
+        }
+
+        .btn-close-qr {
+            background: rgba(255, 86, 0, 0.1);
+            color: var(--cream, #FEEFD9);
+            border: 1px solid rgba(255, 86, 0, 0.45);
+            padding: 12px;
+            font-size: 11.5px;
+            font-weight: 800;
+            font-family: 'Courier New', Courier, monospace;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            border-radius: 4px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .btn-close-qr:hover {
+            background: var(--quill, #FF5600);
+            color: #000000;
+            box-shadow: 0 0 16px rgba(255, 86, 0, 0.35);
+            transform: translateY(-1px);
+        }
+
+        .btn-close-qr:active {
+            transform: scale(0.98);
+        }
+
+        /* Removed 3-panel transparency grid */
+
+        .terminal-disclaimer {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 10px;
+            color: #7c6f64;
+            text-align: center;
+            margin-top: 12px;
+            margin-bottom: 18px;
+            line-height: 1.5;
+            max-width: 38rem;
+        }
+
+        .disc-row {
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+            color: #9e8e82;
+        }
+
+        .disc-text {
+            color: #7c6f64;
+        }
+
+        /* Mobile & Tablet Responsive Safeguards */
+        @media (max-width: 768px) {
+            body {
+                justify-content: flex-start;
+                padding-top: 20px;
+                padding-bottom: 60px; /* Ensure clearance above fixed bottom thorns on mobile */
+            }
+
+            .container {
+                width: 100%;
+                max-width: 100%;
+                padding: 1rem 1.25rem;
+            }
+
+            .reclaim-card {
+                width: 100%;
+                max-width: 100%;
+                padding: 14px 16px;
+            }
+
+            .input-group, .address-input-wrapper {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+                width: 100%;
+            }
+
+            .address-input-wrapper input, #addressInput, #walletInput, input[type="text"] {
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box;
+            }
+
+            .address-input-wrapper button, #checkBtn, button.btn-primary, button.btn-claim, button.btn-qr-toggle, button.btn-qr {
+                width: 100% !important;
+            }
+        }
+
+
+
+        /* Dynamic Multi-layer Punk Kinetic Spikes (Cutting Waveform) */
+        .spikes-wrapper {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100vw;
+            height: 65px;
+            overflow: hidden;
+            z-index: 50;
+            pointer-events: none;
+            display: flex;
+            align-items: flex-end;
+            background: linear-gradient(to top, rgba(26, 20, 16, 0.95), transparent);
+        }
+
+        .spikes-track {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            display: flex;
+            width: max-content;
+            height: 65px;
+            will-change: transform;
+        }
+
+        .spikes-svg {
+            display: block;
+            width: 1200px;
+            height: 65px;
+            flex-shrink: 0;
+        }
+
+        .spikes-bg-track {
+            animation: march-bg 18s linear infinite;
+        }
+
+        .spikes-fg-track {
+            animation: march-fg 12s ease-in-out infinite;
+        }
+
+        @keyframes march-bg {
+            0% { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-1200px, 0, 0); }
+        }
+
+        @keyframes march-fg {
+            0% { transform: translate3d(0, 0, 0); }
+            25% { transform: translate3d(-300px, -3px, 0); }
+            50% { transform: translate3d(-600px, 0, 0); }
+            75% { transform: translate3d(-900px, -4px, 0); }
+            100% { transform: translate3d(-1200px, 0, 0); }
+        }
+
+        /* Top Network Ticker Bar */
+        .net-bar {
+            width: 100%;
+            background: #1A1410;
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 8px 16px;
+            box-sizing: border-box;
+            z-index: 100;
+            text-align: center;
+        }
+
+        .net-bar-inner {
+            max-width: 68rem;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .net-capsule {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #251D17;
+            color: #FEEFD9;
+            border: 1px solid #FF5600;
+            border-radius: 9999px;
+            padding: 4px 12px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.03em;
+            line-height: 1.2;
+        }
+
+        /* Paige Legal Disclaimer */
+        .terminal-disclaimer {
+            max-width: 52rem;
+            margin: 1.5rem auto 1.2rem auto;
+            padding: 14px 18px;
+            background: rgba(37, 29, 23, 0.6);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            text-align: left;
+            box-sizing: border-box;
+        }
+
+        .disc-row {
+            font-size: 0.78rem;
+            font-weight: 800;
+            color: #dcd0c2;
+            letter-spacing: 0.12em;
+            margin-bottom: 6px;
+        }
+
+        .disc-text {
+            font-size: 0.88rem; /* readable cream, not muted 11px */
+            line-height: 1.55;
+            color: var(--cream);
+            opacity: 0.85;
+        }
+
+        /* Site Foot Links (Pill style, no duplicate brackets, nowrap) */
+        .site-foot-links {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.75rem 1.25rem;
+            margin-top: 0.8rem;
+            margin-bottom: 2rem;
+        }
+
+        .site-foot-links a {
+            white-space: nowrap;
+            display: inline-block;
+            color: var(--quill);
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 0.95rem;
+            letter-spacing: 0.08em;
+            padding: 4px 8px;
+            border: 1px solid rgba(255, 86, 0, 0.25);
+            background: rgba(255, 86, 0, 0.05);
+            border-radius: 3px;
+            transition: all 0.2s ease;
+        }
+
+        .site-foot-links a:hover {
+            color: var(--cream);
+            border-color: var(--quill);
+            background: rgba(255, 86, 0, 0.15);
+        }
+    </style>
+</head>
+<body>
+
+    <aside class="net-bar" id="netBar" aria-label="Network Status Ticker"><div class="net-bar-inner"><span class="net-capsule">SOL <span id="netSolPrice">—</span></span> <span class="net-capsule">fee <span id="netFeeSol">—</span></span><span id="netStatus" style="display:none">—</span></div></aside>
+
+    <div class="container">
+        
+        <div class="breadcrumb">
+            <a href="/">Quillhog</a> / <span>Claime</span>
+        </div>
+        
+        <div class="logo-wrap">
+            <svg viewBox="200 260 625 505" width="100%" height="100%" role="img" aria-label="Quillhog logo">
+                <path d="M277.8,605.5 L279.0,621.8 L282.5,639.0 L288.2,653.8 L297.0,670.0 L308.8,685.8 L319.8,697.2 L332.0,707.8 L347.2,718.2 L367.2,729.2 L384.0,736.5 L405.8,743.8 L407.5,743.8 L425.2,748.5 L444.8,752.0 L465.0,754.5 L492.2,756.0 L518.0,756.0 L532.0,755.5 L557.8,753.2 L584.0,749.5 L601.8,746.0 L610.0,743.8 L611.8,743.8 L614.0,742.8 L616.5,742.5 L626.0,740.0 L628.0,739.0 L630.2,738.8 L657.0,729.5 L674.0,722.2 L693.5,712.5 L709.8,703.0 L727.8,691.0 L741.8,680.5 L759.2,665.2 L774.8,650.0 L787.8,635.8 L804.5,615.8 L816.2,600.5 L816.2,599.8 L812.2,598.2 L805.0,597.0 L792.0,593.5 L775.2,590.0 L771.8,589.8 L770.2,589.0 L764.5,583.2 L752.5,569.0 L730.8,538.2 L719.0,523.5 L697.8,501.5 L683.8,489.5 L674.8,482.8 L660.5,473.0 L644.0,463.2 L624.5,453.5 L607.8,446.5 L593.2,441.5 L576.0,436.8 L557.8,433.0 L534.0,429.8 L514.8,428.5 L497.2,428.5 L478.2,429.5 L458.2,432.0 L434.5,436.8 L417.5,441.5 L398.5,448.5 L377.0,458.5 L357.2,470.2 L341.2,482.0 L328.0,493.8 L313.2,509.8 L306.2,518.8 L300.5,527.2 L293.5,539.8 L289.0,549.2 L288.2,552.5 L283.8,564.0 L281.2,573.0 L278.8,588.2 Z" fill="#FEEFD9"/>
+                <path d="M208.0,473.5 L213.5,479.2 L250.8,513.0 L287.5,548.8 L288.8,549.2 L298.0,531.0 L306.0,518.8 L315.5,506.8 L328.0,493.5 L341.2,481.8 L355.0,471.5 L368.5,463.0 L387.0,453.2 L404.2,446.0 L421.5,440.0 L440.0,435.2 L458.2,431.8 L478.2,429.2 L497.2,428.2 L514.8,428.2 L531.5,429.2 L557.8,432.8 L576.0,436.5 L585.5,439.0 L607.8,446.2 L635.0,458.2 L655.8,469.8 L665.5,476.0 L682.5,488.2 L697.8,501.2 L711.2,514.8 L717.5,522.0 L719.2,523.2 L719.8,522.2 L720.8,508.5 L720.8,465.2 L720.2,457.5 L719.8,456.5 L719.2,440.8 L718.5,436.5 L718.5,428.2 L717.5,422.0 L716.8,409.8 L716.2,408.8 L716.0,401.0 L715.0,396.8 L715.0,392.5 L713.8,385.8 L713.5,378.5 L712.5,375.0 L712.5,370.8 L711.5,365.8 L711.0,359.5 L710.0,359.8 L708.0,363.5 L702.8,370.5 L687.5,393.5 L684.8,396.8 L672.5,415.5 L671.0,416.2 L669.8,414.8 L668.2,410.2 L666.0,406.2 L665.8,404.5 L661.2,395.2 L658.5,388.0 L656.2,384.0 L656.0,382.5 L639.2,347.8 L635.2,341.0 L634.8,339.2 L622.5,316.2 L607.0,290.5 L606.0,291.8 L605.5,296.0 L604.5,298.5 L604.2,303.0 L603.2,305.2 L603.0,309.2 L602.0,311.0 L600.8,320.8 L599.5,323.5 L598.2,333.0 L597.2,335.5 L597.0,339.5 L593.5,356.5 L593.5,359.2 L592.5,361.0 L592.2,365.5 L591.2,368.0 L591.0,371.5 L590.0,374.2 L590.0,377.0 L589.2,378.5 L587.8,378.2 L586.0,376.5 L583.2,372.5 L578.8,368.0 L578.0,366.5 L567.8,354.8 L540.2,325.2 L519.8,304.8 L480.0,268.2 L479.0,268.2 L480.0,280.5 L481.0,284.0 L481.2,289.5 L482.2,293.5 L482.5,302.2 L484.5,314.5 L486.2,332.5 L487.0,334.2 L487.0,339.0 L487.5,343.2 L488.2,345.0 L488.2,349.0 L489.2,353.0 L489.5,359.8 L491.0,368.5 L490.2,369.5 L489.2,369.5 L487.2,367.5 L471.2,357.5 L469.8,356.0 L458.5,348.5 L451.5,344.8 L443.2,339.2 L424.8,328.8 L422.5,327.0 L420.8,326.5 L414.8,322.8 L398.0,314.2 L387.0,308.0 L370.0,299.5 L354.2,292.5 L354.5,295.0 L360.2,308.0 L360.5,310.2 L362.5,313.8 L367.5,326.5 L369.8,330.8 L370.0,332.5 L373.5,339.5 L373.5,340.5 L377.0,347.8 L377.0,348.8 L380.5,355.8 L386.8,371.2 L387.8,372.5 L389.2,377.2 L391.0,380.2 L391.5,382.5 L395.0,389.5 L395.0,391.5 L390.2,391.2 L385.5,389.5 L381.2,389.0 L373.8,386.8 L365.0,385.2 L362.2,384.2 L360.0,384.2 L356.2,383.0 L353.5,383.0 L351.5,382.0 L341.5,380.5 L338.8,379.5 L328.8,378.2 L326.0,377.2 L315.0,375.8 L313.2,375.0 L306.5,374.5 L304.8,373.8 L299.5,373.2 L296.2,372.2 L292.5,372.2 L290.5,371.5 L284.0,371.0 L280.8,370.0 L275.5,369.8 L273.8,369.0 L257.8,367.2 L257.2,367.5 L257.5,368.8 L298.0,420.2 L300.2,423.8 L307.2,432.0 L312.0,438.8 L316.0,443.2 L317.0,445.2 L323.0,452.5 L323.2,453.5 L322.0,454.8 L315.2,455.0 L311.0,456.0 L305.0,456.0 L299.2,457.2 L294.8,457.2 L290.2,458.2 L283.8,458.8 L274.2,460.8 L269.0,461.0 L266.8,462.0 L254.8,463.5 L246.8,465.5 L243.0,465.8 L240.8,466.8 L230.8,468.2 L229.2,469.0 L221.0,470.2 L218.0,471.5 L215.8,471.5 Z" fill="#FF5600"/>
+                <circle cx="687.1" cy="576.0" r="16.9" fill="#1A1410"/>
+            </svg>
+        </div>
+        
+        <h1>CLAIME</h1>
+        
+        <p class="subtitle">Pick up SOL locked in empty token accounts.</p>
+
+        <!-- Embedded Claime Reclaim Utility -->
+        <div class="reclaim-card">
+            <div class="reclaim-header">// SCAN EMPTY TOKEN ACCOUNTS [0% PROTOCOL FEE]</div>
+            <p class="reclaim-desc">Enter a Solana public address to locate closed or empty token accounts holding locked rent deposits. Reclaim native SOL via direct CloseAccount instructions.</p>
+            <div class="input-group">
+                <input type="text" id="walletInput" placeholder="Enter Solana public address..." autocomplete="off">
+                <button class="btn-primary" id="checkBtn" onclick="scanAddress()">CHECK</button>
+            </div>
+            <div id="scanResult" class="scan-res"></div>
+        </div>
+
+        <div class="terminal-disclaimer">
+          <div class="disc-row">// NOTICE</div>
+          <div class="disc-text">
+            All operations run on public Solana ledger data. This service does not provide financial or tax advice. Users pay standard Solana network transaction fees in SOL; a 0% protocol fee is not zero network fee. We never hold, request, or store your private keys. We store a salted hash of request metadata, not your IP or keys. No cookies.
+          </div>
+        </div>
+
+        <nav class="site-foot-links">
+            <a href="/">[ Shelf ]</a>
+            <a href="https://x.com/quillhog0" target="_blank" rel="noopener">[ X ]</a>
+            <a href="https://github.com/quillhog0" target="_blank" rel="noopener">[ GitHub ]</a>
+        </nav>
+
+    </div>
+
+    <!-- Dynamic Multi-layer Punk Kinetic Spikes (Cutting Waveform) -->
+    <div class="spikes-wrapper" aria-hidden="true">
+        <div class="spikes-track spikes-bg-track">
+            <svg class="spikes-svg" viewBox="0 0 1200 90" preserveAspectRatio="none"><polygon points="0,90 10,10 20,90 30,22 40,90 50,5 60,90 70,30 80,90 90,10 100,90 110,10 120,90 130,5 140,90 150,18 160,90 170,30 180,90 190,15 200,90 210,28 220,90 230,30 240,90 250,8 260,90 270,15 280,90 290,5 300,90 310,25 320,90 330,28 340,90 350,30 360,90 370,12 380,90 390,15 400,90 410,28 420,90 430,15 440,90 450,12 460,90 470,22 480,90 490,5 500,90 510,28 520,90 530,30 540,90 550,15 560,90 570,15 580,90 590,5 600,90 610,8 620,90 630,28 640,90 650,4 660,90 670,30 680,90 690,10 700,90 710,12 720,90 730,6 740,90 750,25 760,90 770,18 780,90 790,30 800,90 810,28 820,90 830,5 840,90 850,10 860,90 870,6 880,90 890,10 900,90 910,8 920,90 930,25 940,90 950,22 960,90 970,12 980,90 990,28 1000,90 1010,22 1020,90 1030,10 1040,90 1050,10 1060,90 1070,4 1080,90 1090,12 1100,90 1110,15 1120,90 1130,28 1140,90 1150,10 1160,90 1170,4 1180,90 1190,28 1200,90" fill="#FF5600" opacity="0.38"/></svg>
+            <svg class="spikes-svg" viewBox="0 0 1200 90" preserveAspectRatio="none"><polygon points="0,90 10,10 20,90 30,22 40,90 50,5 60,90 70,30 80,90 90,10 100,90 110,10 120,90 130,5 140,90 150,18 160,90 170,30 180,90 190,15 200,90 210,28 220,90 230,30 240,90 250,8 260,90 270,15 280,90 290,5 300,90 310,25 320,90 330,28 340,90 350,30 360,90 370,12 380,90 390,15 400,90 410,28 420,90 430,15 440,90 450,12 460,90 470,22 480,90 490,5 500,90 510,28 520,90 530,30 540,90 550,15 560,90 570,15 580,90 590,5 600,90 610,8 620,90 630,28 640,90 650,4 660,90 670,30 680,90 690,10 700,90 710,12 720,90 730,6 740,90 750,25 760,90 770,18 780,90 790,30 800,90 810,28 820,90 830,5 840,90 850,10 860,90 870,6 880,90 890,10 900,90 910,8 920,90 930,25 940,90 950,22 960,90 970,12 980,90 990,28 1000,90 1010,22 1020,90 1030,10 1040,90 1050,10 1060,90 1070,4 1080,90 1090,12 1100,90 1110,15 1120,90 1130,28 1140,90 1150,10 1160,90 1170,4 1180,90 1190,28 1200,90" fill="#FF5600" opacity="0.38"/></svg>
+            <svg class="spikes-svg" viewBox="0 0 1200 90" preserveAspectRatio="none"><polygon points="0,90 10,10 20,90 30,22 40,90 50,5 60,90 70,30 80,90 90,10 100,90 110,10 120,90 130,5 140,90 150,18 160,90 170,30 180,90 190,15 200,90 210,28 220,90 230,30 240,90 250,8 260,90 270,15 280,90 290,5 300,90 310,25 320,90 330,28 340,90 350,30 360,90 370,12 380,90 390,15 400,90 410,28 420,90 430,15 440,90 450,12 460,90 470,22 480,90 490,5 500,90 510,28 520,90 530,30 540,90 550,15 560,90 570,15 580,90 590,5 600,90 610,8 620,90 630,28 640,90 650,4 660,90 670,30 680,90 690,10 700,90 710,12 720,90 730,6 740,90 750,25 760,90 770,18 780,90 790,30 800,90 810,28 820,90 830,5 840,90 850,10 860,90 870,6 880,90 890,10 900,90 910,8 920,90 930,25 940,90 950,22 960,90 970,12 980,90 990,28 1000,90 1010,22 1020,90 1030,10 1040,90 1050,10 1060,90 1070,4 1080,90 1090,12 1100,90 1110,15 1120,90 1130,28 1140,90 1150,10 1160,90 1170,4 1180,90 1190,28 1200,90" fill="#FF5600" opacity="0.38"/></svg>
+            <svg class="spikes-svg" viewBox="0 0 1200 90" preserveAspectRatio="none"><polygon points="0,90 10,10 20,90 30,22 40,90 50,5 60,90 70,30 80,90 90,10 100,90 110,10 120,90 130,5 140,90 150,18 160,90 170,30 180,90 190,15 200,90 210,28 220,90 230,30 240,90 250,8 260,90 270,15 280,90 290,5 300,90 310,25 320,90 330,28 340,90 350,30 360,90 370,12 380,90 390,15 400,90 410,28 420,90 430,15 440,90 450,12 460,90 470,22 480,90 490,5 500,90 510,28 520,90 530,30 540,90 550,15 560,90 570,15 580,90 590,5 600,90 610,8 620,90 630,28 640,90 650,4 660,90 670,30 680,90 690,10 700,90 710,12 720,90 730,6 740,90 750,25 760,90 770,18 780,90 790,30 800,90 810,28 820,90 830,5 840,90 850,10 860,90 870,6 880,90 890,10 900,90 910,8 920,90 930,25 940,90 950,22 960,90 970,12 980,90 990,28 1000,90 1010,22 1020,90 1030,10 1040,90 1050,10 1060,90 1070,4 1080,90 1090,12 1100,90 1110,15 1120,90 1130,28 1140,90 1150,10 1160,90 1170,4 1180,90 1190,28 1200,90" fill="#FF5600" opacity="0.38"/></svg>
+        </div>
+        <div class="spikes-track spikes-fg-track">
+            <svg class="spikes-svg" viewBox="0 0 1200 90" preserveAspectRatio="none"><polygon points="0,90 10,25 20,90 30,32 40,90 50,52 60,90 70,52 80,90 90,38 100,90 110,30 120,90 130,52 140,90 150,42 160,90 170,40 180,90 190,50 200,90 210,48 220,90 230,25 240,90 250,50 260,90 270,48 280,90 290,35 300,90 310,50 320,90 330,52 340,90 350,28 360,90 370,25 380,90 390,28 400,90 410,40 420,90 430,32 440,90 450,30 460,90 470,52 480,90 490,50 500,90 510,45 520,90 530,28 540,90 550,28 560,90 570,28 580,90 590,45 600,90 610,32 620,90 630,25 640,90 650,40 660,90 670,42 680,90 690,40 700,90 710,40 720,90 730,50 740,90 750,42 760,90 770,25 780,90 790,28 800,90 810,42 820,90 830,28 840,90 850,32 860,90 870,40 880,90 890,48 900,90 910,40 920,90 930,28 940,90 950,50 960,90 970,32 980,90 990,30 1000,90 1010,30 1020,90 1030,38 1040,90 1050,40 1060,90 1070,45 1080,90 1090,25 1100,90 1110,45 1120,90 1130,48 1140,90 1150,38 1160,90 1170,52 1180,90 1190,42 1200,90" fill="#FF5600"/></svg>
+            <svg class="spikes-svg" viewBox="0 0 1200 90" preserveAspectRatio="none"><polygon points="0,90 10,25 20,90 30,32 40,90 50,52 60,90 70,52 80,90 90,38 100,90 110,30 120,90 130,52 140,90 150,42 160,90 170,40 180,90 190,50 200,90 210,48 220,90 230,25 240,90 250,50 260,90 270,48 280,90 290,35 300,90 310,50 320,90 330,52 340,90 350,28 360,90 370,25 380,90 390,28 400,90 410,40 420,90 430,32 440,90 450,30 460,90 470,52 480,90 490,50 500,90 510,45 520,90 530,28 540,90 550,28 560,90 570,28 580,90 590,45 600,90 610,32 620,90 630,25 640,90 650,40 660,90 670,42 680,90 690,40 700,90 710,40 720,90 730,50 740,90 750,42 760,90 770,25 780,90 790,28 800,90 810,42 820,90 830,28 840,90 850,32 860,90 870,40 880,90 890,48 900,90 910,40 920,90 930,28 940,90 950,50 960,90 970,32 980,90 990,30 1000,90 1010,30 1020,90 1030,38 1040,90 1050,40 1060,90 1070,45 1080,90 1090,25 1100,90 1110,45 1120,90 1130,48 1140,90 1150,38 1160,90 1170,52 1180,90 1190,42 1200,90" fill="#FF5600"/></svg>
+            <svg class="spikes-svg" viewBox="0 0 1200 90" preserveAspectRatio="none"><polygon points="0,90 10,25 20,90 30,32 40,90 50,52 60,90 70,52 80,90 90,38 100,90 110,30 120,90 130,52 140,90 150,42 160,90 170,40 180,90 190,50 200,90 210,48 220,90 230,25 240,90 250,50 260,90 270,48 280,90 290,35 300,90 310,50 320,90 330,52 340,90 350,28 360,90 370,25 380,90 390,28 400,90 410,40 420,90 430,32 440,90 450,30 460,90 470,52 480,90 490,50 500,90 510,45 520,90 530,28 540,90 550,28 560,90 570,28 580,90 590,45 600,90 610,32 620,90 630,25 640,90 650,40 660,90 670,42 680,90 690,40 700,90 710,40 720,90 730,50 740,90 750,42 760,90 770,25 780,90 790,28 800,90 810,42 820,90 830,28 840,90 850,32 860,90 870,40 880,90 890,48 900,90 910,40 920,90 930,28 940,90 950,50 960,90 970,32 980,90 990,30 1000,90 1010,30 1020,90 1030,38 1040,90 1050,40 1060,90 1070,45 1080,90 1090,25 1100,90 1110,45 1120,90 1130,48 1140,90 1150,38 1160,90 1170,52 1180,90 1190,42 1200,90" fill="#FF5600"/></svg>
+            <svg class="spikes-svg" viewBox="0 0 1200 90" preserveAspectRatio="none"><polygon points="0,90 10,25 20,90 30,32 40,90 50,52 60,90 70,52 80,90 90,38 100,90 110,30 120,90 130,52 140,90 150,42 160,90 170,40 180,90 190,50 200,90 210,48 220,90 230,25 240,90 250,50 260,90 270,48 280,90 290,35 300,90 310,50 320,90 330,52 340,90 350,28 360,90 370,25 380,90 390,28 400,90 410,40 420,90 430,32 440,90 450,30 460,90 470,52 480,90 490,50 500,90 510,45 520,90 530,28 540,90 550,28 560,90 570,28 580,90 590,45 600,90 610,32 620,90 630,25 640,90 650,40 660,90 670,42 680,90 690,40 700,90 710,40 720,90 730,50 740,90 750,42 760,90 770,25 780,90 790,28 800,90 810,42 820,90 830,28 840,90 850,32 860,90 870,40 880,90 890,48 900,90 910,40 920,90 930,28 940,90 950,50 960,90 970,32 980,90 990,30 1000,90 1010,30 1020,90 1030,38 1040,90 1050,40 1060,90 1070,45 1080,90 1090,25 1100,90 1110,45 1120,90 1130,48 1140,90 1150,38 1160,90 1170,52 1180,90 1190,42 1200,90" fill="#FF5600"/></svg>
+        </div>
+    </div>
+
+    <!-- Secure QR Code Modal with Transparency Manifest -->
+    <div class="qr-security-modal" id="qr-modal" style="display: none;" onclick="closeQrModal(event)">
+      <div class="qr-modal-content" onclick="event.stopPropagation()">
+        <div class="qr-header">// SOLANA PAY TRANSACTION REQUEST</div>
+        
+        <div id="qrNoticeAlert" class="qr-notice-alert" style="display: none;">
+          No browser extension detected. Scan the QR code with your mobile wallet.
+        </div>
+
+        <div class="qr-security-banner">
+          <div class="banner-title">🛡️ VERIFIED NON-CUSTODIAL PAYLOAD</div>
+          <div class="banner-desc">
+            Scanning this QR code with your mobile wallet (Phantom / Solflare) will prompt a transaction containing <b>only native CloseAccount instructions</b>.<br><br>
+            • No smart contract intermediary.<br>
+            • 0% protocol fee.<br>
+            • Funds return exclusively to your signing address.
+          </div>
+        </div>
+
+        <div id="qrDynamicBody">
+          <div class="qr-code-wrapper" id="qrcode-container">
+            <!-- QR code rendered here via qrcode.js -->
+          </div>
+        </div>
+
+        <div class="qr-actions">
+          <button class="btn-close-qr" onclick="closeQrModal()">CLOSE</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+        let currentScanData = null;
+
+        const getSolanaProvider = async () => {
+            // Check immediately and retry up to 3 times (50ms interval) for async injection race conditions
+            for (let i = 0; i < 3; i++) {
+                if (window.backpack?.solana) return { provider: window.backpack.solana, name: 'Backpack' };
+                if (window.backpack) return { provider: window.backpack, name: 'Backpack' };
+                if (window.solflare) return { provider: window.solflare, name: 'Solflare' };
+                if (window.phantom?.solana) return { provider: window.phantom.solana, name: 'Phantom' };
+                if (window.solana) {
+                    const isBackpack = Boolean(window.solana.isBackpack || window.backpack);
+                    const isPhantom = Boolean(window.solana.isPhantom);
+                    return { provider: window.solana, name: isBackpack ? 'Backpack' : (isPhantom ? 'Phantom' : 'Solana') };
+                }
+                await new Promise(r => setTimeout(r, 50));
+            }
+            return null;
+        };
+
+        async function scanAddress() {
+            const addr = document.getElementById('walletInput').value.trim();
+            const resDiv = document.getElementById('scanResult');
+            if (!addr) return;
+
+            resDiv.style.display = 'block';
+            resDiv.innerHTML = "<span class='scanning-pulse'>● Querying SPL & Token-2022 ledger accounts...</span>";
+
+            try {
+                const resp = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ wallet_address: addr })
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    resDiv.innerHTML = `<span style="color:var(--quill);">Error: ${err.detail || 'Failed to fetch ledger data'}</span>`;
+                    return;
+                }
+
+                const data = await resp.json();
+                currentScanData = data;
+
+                if (data.empty_accounts_count > 0) {
+                    resDiv.innerHTML = `
+                        <div class="scan-breakdown">
+                            <div class="breakdown-row">
+                                <span class="row-label">• Empty SPL Accounts:</span>
+                                <span class="row-val" id="stat-spl">${data.empty_spl_count}</span>
+                            </div>
+                            <div class="breakdown-row">
+                                <span class="row-label">• Token-2022 Accounts:</span>
+                                <span class="row-val" id="stat-2022">${data.empty_2022_count}</span>
+                            </div>
+                            <div class="breakdown-row">
+                                <span class="row-label">• Empty Wrapped SOL:</span>
+                                <span class="row-val" id="stat-wsol">${data.wsol_reclaimable_sol.toFixed(5)} SOL</span>
+                            </div>
+                            <div class="breakdown-divider"></div>
+                            <div class="breakdown-total">
+                                <span class="total-label">Total Reclaimable:</span>
+                                <div>
+                                    <span class="sol-amount" id="total-sol">+${data.reclaimable_sol.toFixed(5)} SOL</span>
+                                    <span class="usd-amount" id="total-usd">(~$${data.reclaimable_usd.toFixed(2)} USD)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="claim-actions" id="claimActionsContainer">
+                            <button class="btn-claim" id="btn-claim-action" data-addr="${addr}" onclick="executeClaim()">
+                                SIGN CLOSE
+                            </button>
+                            <button class="btn-qr-toggle btn-qr" onclick="openSolanaPayQr('${addr}', false)">
+                                SIGN VIA SOLANA PAY QR
+                            </button>
+                        </div>
+                        <div id="txDebug"></div>
+                    `;
+                } else {
+                    resDiv.innerHTML = `
+                        ● Scanned accounts: <b>${data.total_token_accounts}</b><br>
+                        ● Wallet is clean. No empty token accounts found to reclaim.
+                    `;
+                }
+            } catch (err) {
+                resDiv.innerHTML = `<span style="color:var(--quill);">Error communicating with local API server.</span>`;
+            }
+        }
+
+        async function executeClaim() {
+            const dbgDiv = document.getElementById('txDebug');
+            const claimBtn = document.getElementById('btn-claim-action');
+            const addr = claimBtn?.dataset?.addr || '';
+            
+            // Check for provider with async injection retry window
+            const walletInfo = await getSolanaProvider();
+            if (!walletInfo) {
+                openSolanaPayQr(addr, true);
+                return;
+            }
+
+            const provider = walletInfo.provider;
+            dbgDiv.innerHTML = "<span class='scanning-pulse' style='display:block; margin-top:10px; font-size:10px;'>● Building CloseAccount (MessageV0)...</span>";
+            if (claimBtn) claimBtn.disabled = true;
+
+            try {
+                // 1. Fetch compiled base64 transaction
+                const resp = await fetch('/api/rent/build-tx', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ wallet_address: addr })
+                });
+                const buildData = await resp.json();
+
+                if (buildData.status !== 'ready' || !buildData.transaction_base64) {
+                    dbgDiv.innerHTML = `<span class="tx-error-msg">✕ ${buildData.message || 'No reclaimable accounts found.'}</span>`;
+                    if (claimBtn) claimBtn.disabled = false;
+                    return;
+                }
+
+                // 2. Pre-Sign Transparency Box before invoking wallet
+                dbgDiv.innerHTML = `
+                    <div class="pre-sign-box">
+                      <div class="pre-sign-title">
+                        <span class="scanning-pulse">●</span> // READY TO EXECUTE: Native CloseAccount batch. Review instructions in your wallet before approving.
+                      </div>
+                      <div class="pre-sign-note">
+                        SECURITY CHECK: This transaction contains exclusively native CloseAccount instructions. No intermediaries, no fee cuts, and funds return directly to your signing address.
+                      </div>
+                    </div>
+                `;
+
+                if (!provider.isConnected) {
+                    await provider.connect();
+                }
+
+                const txBytes = Uint8Array.from(atob(buildData.transaction_base64), c => c.charCodeAt(0));
+                const versionedTx = solanaWeb3.VersionedTransaction.deserialize(txBytes);
+
+                // 3. Sign and send transaction (Normalizing Phantom, Backpack, and Solflare response structures)
+                const res = await provider.signAndSendTransaction(versionedTx);
+                let signature = null;
+                if (typeof res === 'string') {
+                    signature = res;
+                } else if (res && typeof res === 'object') {
+                    const rawSig = res.signature !== undefined ? res.signature : (res.txSignature || res.txid || res);
+                    if (typeof rawSig === 'string') {
+                        signature = rawSig;
+                    } else if (rawSig instanceof Uint8Array || Array.isArray(rawSig)) {
+                        signature = (window.solanaWeb3 && window.solanaWeb3.bs58)
+                            ? window.solanaWeb3.bs58.encode(Uint8Array.from(rawSig))
+                            : (window.solanaWeb3 && window.solanaWeb3.PublicKey ? new window.solanaWeb3.PublicKey(rawSig).toBase58() : String(rawSig));
+                    } else if (typeof rawSig?.toString === 'function' && rawSig.toString() !== '[object Object]') {
+                        signature = rawSig.toString();
+                    }
+                }
+
+                if (!signature) {
+                    throw new Error("Wallet did not return a valid transaction signature.");
+                }
+                
+                // Hide action buttons and render exact Post-Claim Success UI with Solscan & X Follow
+                const actionsContainer = document.getElementById('claimActionsContainer');
+                if (actionsContainer) actionsContainer.style.display = 'none';
+
+                renderSuccessUI(dbgDiv, signature, buildData.accounts_closed_in_batch, buildData.sol_reclaimed);
+
+                // 4. Non-blocking confirmation metrics record
+                fetch('/api/rent/confirm', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        wallet: addr,
+                        signature: signature,
+                        accounts_closed: buildData.accounts_closed_in_batch,
+                        sol_amount: buildData.sol_reclaimed,
+                        estimated_usd: buildData.estimated_usd || 0.0
+                    })
+                }).catch(e => console.debug("Metrics recording notice:", e));
+
+            } catch (err) {
+                console.error("Signing failed or rejected:", err);
+                const isUserRejection = err?.message?.toLowerCase().includes("reject") ||
+                                        err?.message?.toLowerCase().includes("cancel") ||
+                                        err?.code === 4001 ||
+                                        err?.name === "WalletSignTransactionError";
+
+                dbgDiv.innerHTML = `<div class="tx-error-msg">✕ ${isUserRejection ? 'Transaction cancelled by user.' : 'Transaction rejected or expired.'}</div>`;
+            } finally {
+                if (claimBtn) {
+                    claimBtn.disabled = false;
+                }
+            }
+        }
+
+        function renderSuccessUI(container, signature, closedCount, yieldSol) {
+            container.innerHTML = `
+                <div class="tx-result">
+                  <div class="tx-status">✓ FUNDS RECLAIMED DIRECTLY TO YOUR SIGNING ADDRESS</div>
+                  <div class="tx-meta">
+                    Accounts closed: <span class="val" id="res-closed">${closedCount}</span> | 
+                    Net yield: <span class="val-green" id="res-yield">+${yieldSol.toFixed(5)} SOL</span>
+                  </div>
+                  
+                  <div class="tx-actions">
+                    <a href="https://solscan.io/tx/${signature}" id="solscan-link" target="_blank" class="btn-solscan">
+                      VIEW ON SOLSCAN ↗
+                    </a>
+                  </div>
+
+                  <div class="post-claim-deal">
+                    <div class="deal-text">
+                      0% protocol fee. You sign. We never hold keys.<br>
+                      Fair trade: keep the SOL, just drop a follow so we know who we're building for.
+                    </div>
+                    <a href="https://x.com/quillhog0" target="_blank" class="btn-follow-x">
+                      FOLLOW @quillhog0 ↗
+                    </a>
+                  </div>
+                </div>
+            `;
+        }
+
+        function openSolanaPayQr(addr, isFallback = false) {
+            const modal = document.getElementById('qr-modal');
+            const qrNotice = document.getElementById('qrNoticeAlert');
+            const dynamicBody = document.getElementById('qrDynamicBody');
+            
+            if (qrNotice) {
+                qrNotice.style.display = isFallback ? 'block' : 'none';
+            }
+
+            const baseUrl = (window.location && window.location.origin && !window.location.origin.startsWith('file:'))
+                ? window.location.origin
+                : 'https://quillhog.xyz';
+            const targetUrl = `${baseUrl}/api/rent/qr?wallet=${encodeURIComponent(addr)}`;
+            const solanaPayUri = `solana:${encodeURIComponent(targetUrl)}`;
+            const phantomDeepLink = `phantom://v1/open?url=${encodeURIComponent(targetUrl)}`;
+            const solflareDeepLink = `solflare://ul/v1/browse/${encodeURIComponent(targetUrl)}`;
+
+            dynamicBody.innerHTML = `
+                <div class="qr-code-outer">
+                    <div class="qr-code-wrapper" id="qrcode-container"></div>
+                    <div class="qr-center-badge">
+                        <img src="/favicon.png" alt="Quillhog Logo" />
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-bottom: 12px; justify-content: center;">
+                    <a href="${phantomDeepLink}" class="btn-wallet-direct" title="Open directly in Phantom App">
+                        ⚡ PHANTOM APP
+                    </a>
+                    <a href="${solflareDeepLink}" class="btn-wallet-direct" title="Open directly in Solflare App">
+                        ⚡ SOLFLARE APP
+                    </a>
+                </div>
+
+                <div class="qr-scan-instructions" style="font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #a0958d; text-align: left; line-height: 1.6; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 4px; border: 1px solid rgba(255,86,0,0.2);">
+                    <div style="color: var(--quill); font-weight: bold; margin-bottom: 6px;">// HOW TO SCAN &amp; CLAIM:</div>
+                    <div>1. Open <b>Phantom</b> or <b>Solflare</b> mobile app.</div>
+                    <div>2. Tap the <b>QR scanner icon</b> (top right corner).</div>
+                    <div>3. Scan this QR code and approve the transaction.</div>
+                    <div style="margin-top: 10px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                        <a href="${solanaPayUri}" style="color: var(--quill); font-family: monospace; font-size: 11px; text-decoration: underline;">
+                            [ Direct Solana Pay Protocol URI ]
+                        </a>
+                    </div>
+                </div>
+            `;
+
+            const qrContainer = document.getElementById('qrcode-container');
+            try {
+                if (typeof QRCode !== 'undefined') {
+                    new QRCode(qrContainer, {
+                        text: solanaPayUri,
+                        width: 190,
+                        height: 190,
+                        colorDark: "#1A1410",
+                        colorLight: "#FFFFFF",
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                } else {
+                    qrContainer.innerHTML = `<div style="color:#1A1410; font-size:10px; padding:20px 10px; font-family:monospace;">[ QR Code Ready ]<br><span style="word-break:break-all; font-size:9px; color:#555;">${solanaPayUri}</span></div>`;
+                }
+            } catch (err) {
+                console.debug("QR rendering fallback:", err);
+                qrContainer.innerHTML = `<div style="color:#1A1410; font-size:10px; padding:20px 10px; font-family:monospace;">[ QR Code Ready ]<br><span style="word-break:break-all; font-size:9px; color:#555;">${solanaPayUri}</span></div>`;
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function closeQrModal(event) {
+            const modal = document.getElementById('qr-modal');
+            if (modal) modal.style.display = 'none';
+        }
+    </script>
+
+    <!-- Network Bar Live Polling Script -->
+    <script>
+        (function() {
+            async function updateNetworkBar() {
+                try {
+                    const res = await fetch('/api/net');
+                    if (!res.ok) throw new Error('status ' + res.status);
+                    const data = await res.json();
+                    
+                    const solEl = document.getElementById('netSolPrice');
+                    const feeEl = document.getElementById('netFeeSol');
+                    const netEl = document.getElementById('netStatus');
+                    
+                    if (solEl) {
+                        if (data && data.sol_usd != null && !isNaN(Number(data.sol_usd))) {
+                            solEl.textContent = Number(data.sol_usd).toFixed(1);
+                        } else {
+                            solEl.textContent = '—';
+                        }
+                    }
+                    if (feeEl) {
+                        if (data && data.fee_sol != null && !isNaN(Number(data.fee_sol))) {
+                            let f = Number(data.fee_sol).toFixed(9).replace(/0+$/, '');
+                            if (f.endsWith('.')) f = f.slice(0, -1);
+                            feeEl.textContent = f;
+                        } else {
+                            feeEl.textContent = '—';
+                        }
+                    }
+                    if (netEl) {
+                        if (data && data.network && data.network !== 'unknown') {
+                            netEl.textContent = data.network;
+                        } else {
+                            netEl.textContent = '—';
+                        }
+                    }
+                } catch (e) {
+                    ['netSolPrice', 'netFeeSol', 'netStatus'].forEach(function(id) {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = '—';
+                    });
+                }
+            }
+            updateNetworkBar();
+            setInterval(updateNetworkBar, 60000);
+        })();
+    </script>
+</body>
+</html>
