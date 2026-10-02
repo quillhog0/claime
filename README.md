@@ -1,6 +1,5 @@
 ![Claime](banner.svg)
 
-# // CLAIME
 ### // RECLAIM ENGINE
 
 > **100% Non-Custodial Solana Rent Reclaimer.**  
