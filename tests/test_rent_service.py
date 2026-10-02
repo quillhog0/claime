@@ -60,6 +60,8 @@ class TestRentService(unittest.TestCase):
     @patch("rent_service._rpc_call")
     def test_scan_dual_program_and_wsol(self, mock_rpc):
         def rpc_side_effect(method, params):
+            if method == "getBalance":
+                return {"value": 10_000_000}
             if method == "getTokenAccountsByOwner":
                 program_filter = params[1]["programId"]
                 if program_filter == str(TOKEN_PROGRAM_ID):
@@ -153,7 +155,11 @@ class TestRentService(unittest.TestCase):
 
     @patch("rent_service._rpc_call")
     def test_debug_claim_no_reclaimable_accounts(self, mock_rpc):
-        mock_rpc.return_value = {"value": []}
+        def rpc_side_effect(method, params):
+            if method == "getBalance":
+                return {"value": 10_000_000}
+            return {"value": []}
+        mock_rpc.side_effect = rpc_side_effect
         addr = TEST_WALLET
         response = client.post("/api/claim_debug", json={"wallet_address": addr})
         self.assertEqual(response.status_code, 200)
@@ -162,6 +168,8 @@ class TestRentService(unittest.TestCase):
     @patch("rent_service._rpc_call")
     def test_build_tx_endpoint_mixed_spl_token2022_mtu_safe(self, mock_rpc):
         def rpc_side_effect(method, params):
+            if method == "getBalance":
+                return {"value": 10_000_000}
             if method == "getTokenAccountsByOwner":
                 program_filter = params[1]["programId"]
                 if program_filter == str(TOKEN_PROGRAM_ID):
@@ -295,6 +303,8 @@ class TestRentService(unittest.TestCase):
     @patch("rent_service._rpc_call")
     def test_solana_pay_qr_endpoints(self, mock_rpc):
         def rpc_side_effect(method, params):
+            if method == "getBalance":
+                return {"value": 10_000_000}
             if method == "getTokenAccountsByOwner":
                 return {
                     "value": [
@@ -340,6 +350,8 @@ class TestRentService(unittest.TestCase):
         foreign_authority = str(Pubkey.from_bytes(bytes([9] * 32)))
 
         def rpc_side_effect(method, params):
+            if method == "getBalance":
+                return {"value": 10_000_000}
             if method == "getTokenAccountsByOwner":
                 program_filter = params[1]["programId"]
                 if program_filter == str(TOKEN_PROGRAM_ID):
@@ -630,6 +642,8 @@ class TestRentService(unittest.TestCase):
 
         def rpc_side_effect(method, params):
             if method == "getBalance":
+                return {"value": 10_000_000}
+            if method == "getBalance":
                 return {"value": 100000000}
             if method == "getTokenAccountsByOwner":
                 return {
@@ -659,4 +673,3 @@ class TestRentService(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["reclaimable_usd"], 0)
         self.assertIsNone(data["sol_price_usd"])
-
