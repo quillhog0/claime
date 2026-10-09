@@ -27,14 +27,12 @@ charset-normalizer==3.5.2
     # via requests
 click==8.5.0
     # via uvicorn
-colorama==0.4.6
-    # via pytest
 construct==2.10.70
     # via construct-typing
 construct-typing==0.8.1
     # via solana
 fastapi==0.142.2
-    # via -r c:/Users/katka/Desktop/claime-public/requirements.in
+    # via -r requirements.in
 h11==0.16.0
     # via
     #   httpcore
@@ -51,7 +49,7 @@ httpcore2==2.13.1
 httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
-    # via -r c:/Users/katka/Desktop/claime-public/requirements.in
+    # via -r requirements.in
 httpx2[http2]==2.13.1
     # via solana
 hyperframe==6.1.0
@@ -74,7 +72,7 @@ pluggy==1.6.0
     # via pytest
 pydantic==2.13.5
     # via
-    #   -r c:/Users/katka/Desktop/claime-public/requirements.in
+    #   -r requirements.in
     #   fastapi
     #   solana
 pydantic-core==2.46.5
@@ -83,10 +81,10 @@ pygments==2.21.0
     # via pytest
 pytest==9.1.1
     # via
-    #   -r c:/Users/katka/Desktop/claime-public/requirements.in
+    #   -r requirements.in
     #   pytest-asyncio
 pytest-asyncio==1.4.0
-    # via -r c:/Users/katka/Desktop/claime-public/requirements.in
+    # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via arrow
 python-dotenv==1.2.4
@@ -94,14 +92,14 @@ python-dotenv==1.2.4
 pyyaml==6.0.3
     # via uvicorn
 requests==2.34.2
-    # via -r c:/Users/katka/Desktop/claime-public/requirements.in
+    # via -r requirements.in
 six==1.17.0
     # via python-dateutil
-solana==0.40.3
-    # via -r c:/Users/katka/Desktop/claime-public/requirements.in
+solana==0.41.0
+    # via -r requirements.in
 solders==0.29.0
     # via
-    #   -r c:/Users/katka/Desktop/claime-public/requirements.in
+    #   -r requirements.in
     #   solana
 starlette==1.7.0
     # via fastapi
@@ -131,7 +129,9 @@ tzdata==2026.4
 urllib3==2.8.0
     # via requests
 uvicorn[standard]==0.54.0
-    # via -r c:/Users/katka/Desktop/claime-public/requirements.in
+    # via -r requirements.in
+uvloop==0.23.0
+    # via uvicorn
 watchfiles==1.3.0
     # via uvicorn
 websockets==17.1
