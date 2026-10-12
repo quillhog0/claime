@@ -1,0 +1,6 @@
+Quillhog Claime Core
+Copyright (c) 2026 Quillhog (https://quillhog.xyz)
+
+This product contains the open-source core transaction compilation logic
+for the Claime Solana rent reclamation service.
+100% Non-custodial transaction builder with strict owner destination verification.

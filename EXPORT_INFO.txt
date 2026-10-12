@@ -1,0 +1,6 @@
+Quillhog Claime Public Core Export
+Source Commit: 58a8441c6fa2b41a5bb67793beb6abbf13c19890
+Commit Date: 2026-10-12T13:00:39+02:00
+Profile: core
+File Count: 8
+Test Status: VERIFIED
