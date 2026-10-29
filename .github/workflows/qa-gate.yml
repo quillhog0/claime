@@ -1,0 +1,19 @@
+name: QA gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  qa-ecosystem:
+    runs-on: ubuntu-latest
+    # Warn-only for now; remove continue-on-error to make it blocking.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: quillhog0/QA-Ecosystem@master
+        with:
+          project: .
+          docs: .
+          allow-sysctl-userns: "true"
